@@ -21,41 +21,51 @@ function stripUserSecrets<T extends { password_hash?: string; refresh_token?: st
  * @swagger
  * /api/users:
  *   get:
- *     summary: Listar usuarios (paginado)
+ *     summary: Listar todos los usuarios (admin)
  *     tags: [Users]
  *     security:
  *       - cookieAuth: []
  *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 25 }
  *       - in: query
  *         name: role
  *         schema: { type: string, enum: [admin, staff, driver, client] }
  *       - in: query
  *         name: is_active
  *         schema: { type: boolean }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Buscar por nombre, email o teléfono
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
  *     responses:
  *       200:
- *         description: Lista de usuarios
+ *         description: Lista de usuarios con paginación
  */
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
-    const { role, is_active } = req.query;
-    const filter: { role?: string; is_active?: boolean } = {};
-    if (typeof role === "string" && role.length) filter.role = role;
+    const { role, is_active, search } = req.query;
+    const { page, limit } = parsePagination(req);
+    
+    const filter: { role?: string; is_active?: boolean; search?: string } = {};
+    if (role) filter.role = role as string;
     if (is_active !== undefined) filter.is_active = is_active === "true";
+    if (search) filter.search = search as string;
 
-    const { page, limit, skip } = parsePagination(req);
-    const { users, total } = await UserService.listUsersFiltered(filter, limit, skip);
-    const safe = users.map((u) => stripUserSecrets(u));
+    const { users, total } = await UserService.getAllUsers(filter, page, limit);
 
-    return sendSuccess(res, 200, "Users retrieved", safe, paginationMeta(total, page, limit));
+    return sendSuccess(
+      res,
+      200,
+      "Users retrieved",
+      users,
+      paginationMeta(total, page, limit)
+    );
   } catch (error) {
-    console.error("getAllUsers:", error);
     return sendError(res, 400, "Failed to fetch users");
   }
 };

@@ -23,6 +23,7 @@ export class RouteRepository {
     driver_id?: number;
     area?: string;
     date?: string;
+    search?: string | undefined;
   }, limit: number, skip: number): Promise<{ routes: any[]; total: number }> {
     let whereClauses: string[] = [];
     let params: any[] = [];
@@ -43,10 +44,14 @@ export class RouteRepository {
       whereClauses.push("r.route_date = ?");
       params.push(filter.date);
     }
+    if (filter.search) {
+      whereClauses.push("r.area LIKE ?");
+      params.push(`%${filter.search}%`);
+    }
 
     const whereStr = whereClauses.length ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
-    const [routes] = await pool.execute<RowDataPacket[]>(
+    const [routes] = await pool.query<RowDataPacket[]>(
       `SELECT r.*, 
               u.name as driver_name, u.email as driver_email, u.phone as driver_phone
        FROM routes r
@@ -54,19 +59,21 @@ export class RouteRepository {
        ${whereStr}
        ORDER BY r.route_date DESC, r.id DESC
        LIMIT ? OFFSET ?`,
-      [...params, limit.toString(), skip.toString()]
+      [...params, limit, skip]
     );
 
-    const [totalRows] = await pool.execute<RowDataPacket[]>(
+    const [totalRows] = await pool.query<RowDataPacket[]>(
       `SELECT COUNT(*) as total FROM routes r ${whereStr}`,
       params
     );
+
 
     return {
       routes: routes as any[],
       total: Number(totalRows[0]?.total) || 0,
     };
   }
+
 
   static async findById(id: number | string): Promise<any | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(

@@ -57,6 +57,10 @@ export const createItem = async (req: Request, res: Response) => {
  *       - cookieAuth: []
  *     parameters:
  *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Buscar por código o nombre
+ *       - in: query
  *         name: is_active
  *         schema: { type: boolean }
  *       - in: query
@@ -64,17 +68,18 @@ export const createItem = async (req: Request, res: Response) => {
  *         schema: { type: integer, default: 1 }
  *       - in: query
  *         name: limit
- *         schema: { type: integer, default: 25 }
+ *         schema: { type: integer, default: 10 }
  *     responses:
  *       200:
- *         description: Lista de ítems
+ *         description: Lista de ítems con paginación
  */
 export const getAllItems = async (req: Request, res: Response) => {
   try {
     const is_active = req.query.is_active === undefined ? undefined : req.query.is_active === "true";
+    const search = req.query.search as string | undefined;
     const { page, limit, skip } = parsePagination(req);
     
-    const { items, total } = await ItemService.getAllItems(is_active, limit, skip);
+    const { items, total } = await ItemService.getAllItems(is_active, limit, skip, search);
     
     // Map items to ensure is_active is boolean
     const mappedItems = items.map((item) => ({
@@ -94,6 +99,7 @@ export const getAllItems = async (req: Request, res: Response) => {
     return sendError(res, 400, "Failed to fetch items");
   }
 };
+
 
 
 /**
@@ -137,10 +143,21 @@ export const getItemById = async (req: Request, res: Response) => {
  *         name: id
  *         required: true
  *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               item_code: { type: string }
+ *               name: { type: string }
+ *               base_price: { type: number }
+ *               is_active: { type: boolean }
  *     responses:
  *       200:
  *         description: Ítem actualizado
  */
+
 export const updateItem = async (req: Request, res: Response) => {
   try {
     const itemId = req.params.id as string;

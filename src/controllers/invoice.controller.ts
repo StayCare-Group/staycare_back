@@ -24,31 +24,80 @@ export const createInvoice = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * @swagger
+ * /api/invoices:
+ *   get:
+ *     summary: Listar todas las facturas
+ *     tags: [Invoices]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Buscar por número de factura o nombre de cliente
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [pending, paid, overdue] }
+ *       - in: query
+ *         name: client_id
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *     responses:
+ *       200:
+ *         description: Lista de facturas con paginación
+ */
 export const getAllInvoices = async (req: Request, res: Response) => {
   try {
-    const { status, from, to } = req.query;
-    const filter: { status?: string; client_id?: number | string; from?: string; to?: string } = {};
-    if (status) filter.status = status as string;
-    if (from) filter.from = from as string;
-    if (to) filter.to = to as string;
+    const { status, client_id, from, to, search } = req.query;
+    const { page, limit, skip } = parsePagination(req);
 
+    const filter: {
+      status?: string | undefined;
+      client_id?: number | string | undefined;
+      from?: string | undefined;
+      to?: string | undefined;
+      search?: string | undefined;
+    } = {
+      status: status as string,
+      client_id: client_id as string | number,
+      from: from as string,
+      to: to as string,
+      search: search as string,
+    };
+
+    // If client role, force client_id
     if (req.user!.role === "client") {
-      const clientId = await InvoiceService.getClientIdForUser(Number(req.user!.userId));
-      if (!clientId) {
-        // No linked profile → return empty
-        return sendSuccess(res, 200, "Invoices retrieved", [], paginationMeta(0, 1, 20));
-      }
-      filter.client_id = clientId;
-    } else if (req.query.client_id) {
-      filter.client_id = req.query.client_id as string;
+      const dbClientId = await InvoiceService.getClientIdForUser(Number(req.user!.userId));
+      if (!dbClientId) return sendError(res, 403, "Client profile not found");
+      filter.client_id = dbClientId;
     }
 
-    const { page, limit, skip } = parsePagination(req);
-    const { invoices, total } = await InvoiceService.getAllInvoices(filter, limit, skip);
+    const { invoices, total } = await InvoiceService.getAllInvoices(filter as any, limit, skip);
 
-    return sendSuccess(res, 200, "Invoices retrieved", invoices, paginationMeta(total, page, limit));
-  } catch (error: any) {
-    return sendError(res, 400, error.message || "Failed to fetch invoices");
+
+    return sendSuccess(
+      res,
+      200,
+      "Invoices retrieved",
+      invoices,
+      paginationMeta(total, page, limit)
+    );
+  } catch (error) {
+    console.error("getAllInvoices error:", error);
+    return sendError(res, 400, "Failed to fetch invoices");
   }
 };
 

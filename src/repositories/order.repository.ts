@@ -164,46 +164,54 @@ export class OrderRepository {
     if (filter.status) {
       if (Array.isArray(filter.status)) {
         const placeholders = filter.status.map(() => "?").join(", ");
-        where += ` AND status IN (${placeholders})`;
+        where += ` AND o.status IN (${placeholders})`;
         params.push(...filter.status);
       } else {
-        where += " AND status = ?";
+        where += " AND o.status = ?";
         params.push(filter.status);
       }
     }
     if (filter.client_id) {
-      where += " AND client_id = ?";
+      where += " AND o.client_id = ?";
       params.push(filter.client_id);
     }
     if (filter.driver_id) {
-      where += " AND driver_id = ?";
+      where += " AND o.driver_id = ?";
       params.push(filter.driver_id);
     }
     if (filter.service_type) {
-      where += " AND service_type = ?";
+      where += " AND o.service_type = ?";
       params.push(filter.service_type);
     }
     if (filter.from) {
-      where += " AND created_at >= ?";
+      where += " AND o.created_at >= ?";
       params.push(filter.from);
     }
     if (filter.to) {
-      where += " AND created_at <= ?";
+      where += " AND o.created_at <= ?";
       params.push(filter.to);
     }
     if (filter.pickup_from) {
-      where += " AND pickup_date >= ?";
+      where += " AND o.pickup_date >= ?";
       params.push(filter.pickup_from);
     }
     if (filter.pickup_to) {
-      where += " AND pickup_date <= ?";
+      where += " AND o.pickup_date <= ?";
       params.push(filter.pickup_to);
     }
+    if (filter.search) {
+      where += " AND (o.order_number LIKE ? OR cp.contact_person LIKE ?)";
+      const pattern = `%${filter.search}%`;
+      params.push(pattern, pattern);
+    }
 
-    const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT COUNT(*) as total FROM orders WHERE ${where}`,
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT COUNT(*) as total FROM orders o 
+       INNER JOIN client_profiles cp ON o.client_id = cp.id 
+       WHERE ${where}`,
       params
     );
+
     return (rows[0] as { total: number }).total;
   }
 
@@ -249,10 +257,15 @@ export class OrderRepository {
       where += " AND o.pickup_date <= ?";
       params.push(filter.pickup_to);
     }
+    if (filter.search) {
+      where += " AND (o.order_number LIKE ? OR cp.contact_person LIKE ?)";
+      const pattern = `%${filter.search}%`;
+      params.push(pattern, pattern);
+    }
 
     params.push(limit, offset);
 
-    const [rows] = await pool.execute<RowDataPacket[]>(
+    const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT o.*, 
               cp.contact_person as client_name,
               u.name as driver_name,
@@ -266,6 +279,8 @@ export class OrderRepository {
        LIMIT ? OFFSET ?`,
       params
     );
+
+
     return rows;
   }
 }

@@ -72,10 +72,11 @@ export class InvoiceService {
   }
 
   static async getAllInvoices(
-    filter: { status?: string; client_id?: number | string; from?: string; to?: string },
+    filter: { status?: string; client_id?: number | string; from?: string; to?: string; search?: string | undefined },
     limit: number,
     offset: number
   ) {
+
     const [invoices, total] = await Promise.all([
       InvoiceRepository.findManyFiltered(filter, limit, offset),
       InvoiceRepository.countFiltered(filter),

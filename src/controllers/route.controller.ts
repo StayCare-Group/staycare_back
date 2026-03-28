@@ -66,38 +66,51 @@ export const createRoute = async (req: Request, res: Response) => {
  *         name: date
  *         schema: { type: string, format: date }
  *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Buscar por área (coincidencia parcial)
+ *       - in: query
  *         name: page
  *         schema: { type: integer, default: 1 }
  *       - in: query
  *         name: limit
- *         schema: { type: integer, default: 20 }
+ *         schema: { type: integer, default: 10 }
  *     responses:
  *       200:
- *         description: Lista de rutas
+ *         description: Lista de rutas con paginación
  */
 export const getAllRoutes = async (req: Request, res: Response) => {
   try {
-    const { status, driver, area, date } = req.query;
+    const { status, driver, area, date, search } = req.query;
+    const { page, limit, skip } = parsePagination(req);
     const filter: any = {};
 
     if (status) filter.status = status;
     if (area) filter.area = area;
     if (date) filter.date = date;
+    if (search) filter.search = search;
 
     if (req.user!.role === "driver") {
-      filter.driver_id = req.user!.userId;
+      filter.driver_id = Number(req.user!.userId);
     } else if (driver) {
       filter.driver_id = Number(driver);
     }
 
-    const { page, limit, skip } = parsePagination(req);
     const { routes, total } = await RouteService.listRoutes(filter, limit, skip);
 
-    return sendSuccess(res, 200, "Routes retrieved", routes, paginationMeta(total, page, limit));
+    return sendSuccess(
+      res,
+      200, 
+      "Routes retrieved", 
+      routes, 
+      paginationMeta(total, page, limit)
+    );
   } catch (error) {
+    console.error("getAllRoutes error:", error);
     return sendError(res, 400, "Failed to fetch routes");
   }
 };
+
 
 /**
  * @swagger

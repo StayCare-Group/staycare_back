@@ -71,23 +71,56 @@ export class ClientProfileRepository {
     return uid ?? null;
   }
 
-  static async countAll(): Promise<number> {
-    const [rows] = await pool.execute<RowDataPacket[]>(
-      "SELECT COUNT(*) AS total FROM client_profiles"
+  static async countFiltered(filter: { is_active?: boolean | undefined; search?: string | undefined }): Promise<number> {
+    let where = "1=1";
+    const params: any[] = [];
+    if (filter.is_active !== undefined) {
+      where += " AND u.is_active = ?";
+      params.push(filter.is_active ? 1 : 0);
+    }
+    if (filter.search) {
+      where += " AND (cp.contact_person LIKE ? OR cp.vat_number LIKE ? OR u.name LIKE ? OR u.email LIKE ?)";
+      const pattern = `%${filter.search}%`;
+      params.push(pattern, pattern, pattern, pattern);
+    }
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS total FROM client_profiles cp INNER JOIN users u ON cp.user_id = u.id WHERE ${where}`,
+      params
     );
+
     return Number((rows[0] as { total: number }).total) || 0;
   }
 
-  static async listWithUsersPaginated(limit: number, offset: number): Promise<ClientListRow[]> {
-    const [rows] = await pool.execute<RowDataPacket[]>(
+  static async listWithUsersPaginated(
+    limit: number,
+    offset: number,
+    filter: { is_active?: boolean | undefined; search?: string | undefined } = {}
+  ): Promise<ClientListRow[]> {
+
+    let where = "1=1";
+    const params: any[] = [];
+    if (filter.is_active !== undefined) {
+      where += " AND u.is_active = ?";
+      params.push(filter.is_active ? 1 : 0);
+    }
+    if (filter.search) {
+      where += " AND (cp.contact_person LIKE ? OR cp.vat_number LIKE ? OR u.name LIKE ? OR u.email LIKE ?)";
+      const pattern = `%${filter.search}%`;
+      params.push(pattern, pattern, pattern, pattern);
+
+    }
+    params.push(limit, offset);
+
+    const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT cp.id AS client_profile_id, cp.user_id, cp.contact_person, cp.vat_number, cp.billing_address,
               cp.credits_terms_days, cp.pricing_tier, cp.created_at, cp.updated_at,
               u.name AS user_name, u.email, u.phone, u.language, u.is_active
        FROM client_profiles cp
        INNER JOIN users u ON u.id = cp.user_id
+       WHERE ${where}
        ORDER BY cp.id DESC
        LIMIT ? OFFSET ?`,
-      [limit, offset]
+      params
     );
     return rows as ClientListRow[];
   }
@@ -98,6 +131,7 @@ export class ClientProfileRepository {
       Pick<IClientProfileRow, "contact_person" | "vat_number" | "billing_address" | "credits_terms_days" | "pricing_tier">
     >
   ): Promise<void> {
+
     const allowed: Record<string, unknown> = {};
     if (data.contact_person !== undefined) allowed.contact_person = data.contact_person;
     if (data.vat_number !== undefined) allowed.vat_number = data.vat_number;

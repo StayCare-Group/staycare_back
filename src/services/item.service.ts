@@ -1,11 +1,12 @@
 import { ItemRepository, type ItemInsertInput } from "../repositories/item.repository";
 
 export class ItemService {
-  static async getAllItems(is_active?: boolean, limit?: number, offset?: number) {
-    const items = await ItemRepository.findAll(is_active, limit, offset);
-    const total = await ItemRepository.count(is_active);
+  static async getAllItems(is_active?: boolean, limit?: number, offset?: number, search?: string) {
+    const items = await ItemRepository.findAll(is_active, limit, offset, search);
+    const total = await ItemRepository.count(is_active, search);
     return { items, total };
   }
+
 
   static async getItemById(id: number | string) {
     return await ItemRepository.findById(id);

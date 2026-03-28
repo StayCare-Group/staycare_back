@@ -167,7 +167,7 @@ export class InvoiceRepository {
   // ─── Filtered list ─────────────────────────────────────────────────────────
 
   static async findManyFiltered(
-    filter: { status?: string; client_id?: number | string; from?: string; to?: string },
+    filter: { status?: string; client_id?: number | string; from?: string; to?: string; search?: string | undefined },
     limit: number,
     offset: number
   ): Promise<IInvoiceMySQL[]> {
@@ -190,10 +190,15 @@ export class InvoiceRepository {
       where += " AND i.issue_date <= ?";
       params.push(filter.to);
     }
+    if (filter.search) {
+      where += " AND (i.invoice_number LIKE ? OR cp.contact_person LIKE ?)";
+      const pattern = `%${filter.search}%`;
+      params.push(pattern, pattern);
+    }
 
     params.push(limit, offset);
 
-    const [rows] = await pool.execute<RowDataPacket[]>(
+    const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT i.*,
               u.name AS client_name,
               cp.contact_person
@@ -205,11 +210,12 @@ export class InvoiceRepository {
        LIMIT ? OFFSET ?`,
       params
     );
+
     return rows as IInvoiceMySQL[];
   }
 
   static async countFiltered(
-    filter: { status?: string; client_id?: number | string; from?: string; to?: string }
+    filter: { status?: string; client_id?: number | string; from?: string; to?: string; search?: string | undefined }
   ): Promise<number> {
     let where = "1=1";
     const params: any[] = [];
@@ -230,11 +236,19 @@ export class InvoiceRepository {
       where += " AND i.issue_date <= ?";
       params.push(filter.to);
     }
+    if (filter.search) {
+      where += " AND (i.invoice_number LIKE ? OR cp.contact_person LIKE ?)";
+      const pattern = `%${filter.search}%`;
+      params.push(pattern, pattern);
+    }
 
-    const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT COUNT(*) AS total FROM invoices i WHERE ${where}`,
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS total FROM invoices i 
+       INNER JOIN client_profiles cp ON i.client_id = cp.id 
+       WHERE ${where}`,
       params
     );
+
     return Number((rows[0] as { total: number }).total) || 0;
   }
 

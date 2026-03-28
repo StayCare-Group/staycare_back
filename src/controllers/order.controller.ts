@@ -122,6 +122,10 @@ export const createOrder = async (req: Request, res: Response) => {
  *         name: to
  *         schema: { type: string, format: date }
  *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Buscar por número de pedido o nombre de cliente
+ *       - in: query
  *         name: page
  *         schema: { type: integer, default: 1 }
  *       - in: query
@@ -135,8 +139,9 @@ export const createOrder = async (req: Request, res: Response) => {
  */
 export const getAllOrders = async (req: Request, res: Response) => {
   try {
-    const { status, client_id, service_type, from, to, pickup_from, pickup_to } = req.query;
-    const filter: any = { status, client_id, service_type, from, to, pickup_from, pickup_to };
+    const { status, client_id, service_type, from, to, pickup_from, pickup_to, search } = req.query;
+    const { page, limit, skip } = parsePagination(req);
+    const filter: any = { status, client_id, service_type, from, to, pickup_from, pickup_to, search };
 
     // 1. Admin: Si busca pendientes de asignación, eliminamos restricción de fecha por defecto
     if (req.user!.role === "admin" && status === OrderStatus.PENDING) {
@@ -173,14 +178,21 @@ export const getAllOrders = async (req: Request, res: Response) => {
       }
     }
 
-    const { page, limit, skip } = parsePagination(req);
     const { orders, total } = await OrderService.getAllOrders(filter, limit, skip);
 
-    return sendSuccess(res, 200, "Orders retrieved", orders, paginationMeta(total, page, limit));
+    return sendSuccess(
+      res,
+      200,
+      "Orders retrieved",
+      orders,
+      paginationMeta(total, page, limit)
+    );
   } catch (error: any) {
+    console.error("getAllOrders error:", error);
     return sendError(res, 400, error.message || "Failed to fetch orders");
   }
 };
+
 
 /**
  * @swagger

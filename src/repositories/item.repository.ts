@@ -18,13 +18,29 @@ export interface ItemInsertInput {
 }
 
 export class ItemRepository {
-  static async findAll(is_active?: boolean, limit?: number, offset?: number): Promise<IItemRow[]> {
+  static async findAll(
+    is_active?: boolean,
+    limit?: number,
+    offset?: number,
+    search?: string,
+  ): Promise<IItemRow[]> {
     let query = "SELECT * FROM items";
+    const whereClauses: string[] = [];
     const params: any[] = [];
 
     if (is_active !== undefined) {
-      query += " WHERE is_active = ?";
+      whereClauses.push("is_active = ?");
       params.push(is_active ? 1 : 0);
+    }
+
+    if (search) {
+      whereClauses.push("(item_code LIKE ? OR name LIKE ?)");
+      const searchPattern = `%${search}%`;
+      params.push(searchPattern, searchPattern);
+    }
+
+    if (whereClauses.length > 0) {
+      query += ` WHERE ${whereClauses.join(" AND ")}`;
     }
 
     query += " ORDER BY item_code ASC";
@@ -34,22 +50,36 @@ export class ItemRepository {
       params.push(limit, offset);
     }
 
-    const [rows] = await pool.execute<IItemRow[]>(query, params);
+    const [rows] = await pool.query<IItemRow[]>(query, params);
+
     return rows;
   }
 
-  static async count(is_active?: boolean): Promise<number> {
+  static async count(is_active?: boolean, search?: string): Promise<number> {
     let query = "SELECT COUNT(*) as total FROM items";
+    const whereClauses: string[] = [];
     const params: any[] = [];
 
     if (is_active !== undefined) {
-      query += " WHERE is_active = ?";
+      whereClauses.push("is_active = ?");
       params.push(is_active ? 1 : 0);
     }
 
-    const [rows] = await pool.execute<RowDataPacket[]>(query, params);
+    if (search) {
+      whereClauses.push("(item_code LIKE ? OR name LIKE ?)");
+      const searchPattern = `%${search}%`;
+      params.push(searchPattern, searchPattern);
+    }
+
+    if (whereClauses.length > 0) {
+      query += ` WHERE ${whereClauses.join(" AND ")}`;
+    }
+
+    const [rows] = await pool.query<RowDataPacket[]>(query, params);
+
     return (rows[0] as { total: number }).total;
   }
+
 
   static async findById(id: number | string): Promise<IItemRow | null> {
     const [rows] = await pool.execute<IItemRow[]>("SELECT * FROM items WHERE id = ?", [id]);

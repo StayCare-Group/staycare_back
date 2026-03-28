@@ -114,7 +114,7 @@ export class UserRepository {
     return (rows[0] as IUserMySQL) || null;
   }
 
-  static async countFiltered(filter: { role?: string; is_active?: boolean }): Promise<number> {
+  static async countFiltered(filter: { role?: string; is_active?: boolean; search?: string }): Promise<number> {
     let where = "1=1";
     const params: (string | number | boolean)[] = [];
     if (filter.role) {
@@ -123,9 +123,15 @@ export class UserRepository {
     }
     if (filter.is_active !== undefined) {
       where += " AND u.is_active = ?";
-      params.push(filter.is_active);
+      params.push(filter.is_active ? 1 : 0);
     }
-    const [rows] = await pool.execute<RowDataPacket[]>(
+    if (filter.search) {
+      where += " AND (u.name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)";
+      const pattern = `%${filter.search}%`;
+      params.push(pattern, pattern, pattern);
+    }
+    const [rows] = await pool.query<RowDataPacket[]>(
+
       `SELECT COUNT(*) AS total FROM users u INNER JOIN roles r ON u.role_id = r.id WHERE ${where}`,
       params
     );
@@ -137,7 +143,7 @@ export class UserRepository {
   }
 
   static async findManyFiltered(
-    filter: { role?: string; is_active?: boolean },
+    filter: { role?: string; is_active?: boolean; search?: string },
     limit: number,
     offset: number
   ): Promise<IUserMySQL[]> {
@@ -149,13 +155,19 @@ export class UserRepository {
     }
     if (filter.is_active !== undefined) {
       where += " AND u.is_active = ?";
-      params.push(filter.is_active);
+      params.push(filter.is_active ? 1 : 0);
+    }
+    if (filter.search) {
+      where += " AND (u.name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)";
+      const pattern = `%${filter.search}%`;
+      params.push(pattern, pattern, pattern);
     }
     params.push(limit, offset);
-    const [rows] = await pool.execute<RowDataPacket[]>(
+    const [rows] = await pool.query<RowDataPacket[]>(
       `${USER_BASE_SELECT} WHERE ${where} ORDER BY u.id DESC LIMIT ? OFFSET ?`,
       params
     );
+
     return rows as IUserMySQL[];
   }
 }

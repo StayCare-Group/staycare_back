@@ -34,12 +34,13 @@ export type UpdateUserByAdminBody = {
 export class UserService {
   // --- Listado / detalle (rol client vía client_profiles.id en rutas /api/clients) ---
 
-  static async listUsersWithClientProfilesPaginated(page: number, limit: number) {
-    const skip = (page - 1) * limit;
-    const total = await ClientProfileRepository.countAll();
-    const rows = await ClientProfileRepository.listWithUsersPaginated(limit, skip);
+  static async getAllClients(page: number, limit: number, filter: { is_active?: boolean | undefined; search?: string | undefined } = {}) {
+    const offset = (page - 1) * limit;
+    const total = await ClientProfileRepository.countFiltered(filter);
+    const rows = await ClientProfileRepository.listWithUsersPaginated(limit, offset, filter);
     return { rows, total };
   }
+
 
   static async getUserDetailByClientProfileId(clientProfileId: number): Promise<{
     client_profile: IClientProfileRow;
@@ -128,13 +129,14 @@ export class UserService {
 
   // --- Gestión directa por `users.id` (rutas /api/users) ---
 
-  static async listUsersFiltered(
-    filter: { role?: string; is_active?: boolean },
-    limit: number,
-    skip: number
-  ): Promise<{ users: IUserMySQL[]; total: number }> {
+  static async getAllUsers(
+    filter: { role?: string; is_active?: boolean; search?: string },
+    page: number,
+    limit: number
+  ) {
+    const offset = (page - 1) * limit;
+    const users = await UserRepository.findManyFiltered(filter, limit, offset);
     const total = await UserRepository.countFiltered(filter);
-    const users = await UserRepository.findManyFiltered(filter, limit, skip);
     return { users, total };
   }
 

@@ -1,20 +1,57 @@
 import { Request, Response } from "express";
 import { UserService } from "../services/user.service";
 import { sendSuccess, sendError } from "../utils/response";
-import { paginationMeta } from "../utils/paginate";
+import { parsePagination, paginationMeta } from "../utils/paginate";
 import { AppError } from "../utils/AppError";
 
+
+/**
+ * @swagger
+ * /api/clients:
+ *   get:
+ *     summary: Listar todos los perfiles de cliente (admin)
+ *     tags: [Clients]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Buscar por contacto, VAT, nombre o email
+ *       - in: query
+ *         name: is_active
+ *         schema: { type: boolean }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *     responses:
+ *       200:
+ *         description: Lista de clientes con paginación
+ */
 export const getAllClients = async (req: Request, res: Response) => {
   try {
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 25;
-    const { rows, total } = await UserService.listUsersWithClientProfilesPaginated(page, limit);
+    const is_active = req.query.is_active === undefined ? undefined : req.query.is_active === "true";
+    const search = req.query.search as string | undefined;
+    const { page, limit } = parsePagination(req);
+
+    const filter: { is_active?: boolean | undefined; search?: string | undefined } = {
+      is_active,
+      search,
+    };
+    
+    const { rows, total } = await UserService.getAllClients(page, limit, filter);
+    
     return sendSuccess(res, 200, "Clients retrieved", rows, paginationMeta(total, page, limit));
+
   } catch (error: unknown) {
     if (error instanceof AppError) return sendError(res, error.statusCode, error.message);
     return sendError(res, 400, "Failed to fetch clients");
   }
 };
+
 
 export const getClientById = async (req: Request, res: Response) => {
   try {
