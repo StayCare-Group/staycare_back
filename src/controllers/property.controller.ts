@@ -12,19 +12,40 @@ import { AppError } from "../utils/AppError";
 
 /**
  * @swagger
- * /api/properties/me:
+ * /api/properties/user/{userId}:
  *   get:
- *     summary: Obtener mis sedes (Cliente)
+ *     summary: Obtener sedes de un usuario (Admin o Dueño)
+ *     description: Si userId es "me", devuelve las sedes del usuario autenticado. Los clientes solo pueden ver sus propias sedes.
  *     tags: [Properties]
  *     security:
  *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *         description: ID numérico del usuario o "me"
  *     responses:
  *       200:
- *         description: Lista de sedes del usuario autenticado
+ *         description: Lista de sedes del usuario
  */
-export const getMyProperties = async (req: Request, res: Response) => {
+export const getUserProperties = async (req: Request, res: Response) => {
   try {
-    const userId = Number(req.user!.userId);
+    const rawId = req.params.userId;
+    let userId: number;
+
+    if (rawId === "me") {
+      userId = Number(req.user!.userId);
+    } else {
+      userId = Number(rawId);
+      if (isNaN(userId)) return sendError(res, 400, "Invalid user id");
+      
+      // Permission check: if not admin, can only see their own properties
+      if (req.user!.role !== "admin" && userId !== Number(req.user!.userId)) {
+        return sendError(res, 403, "Forbidden: You can only view your own properties");
+      }
+    }
+
     const properties = await PropertyService.listByUserId(userId);
     return sendSuccess(res, 200, "Properties retrieved", properties);
   } catch (error: unknown) {
@@ -32,6 +53,7 @@ export const getMyProperties = async (req: Request, res: Response) => {
     return sendError(res, 400, "Failed to fetch properties");
   }
 };
+
 
 /**
  * @swagger
@@ -53,15 +75,19 @@ export const getMyProperties = async (req: Request, res: Response) => {
  */
 export const addProperty = async (req: Request, res: Response) => {
   try {
-    const idParam = req.params.userId; // Optional userId in path
+    const idParam = req.params.userId || "me"; 
     let userId: number;
 
-    if (!idParam || idParam === "me") {
+    if (idParam === "me") {
       userId = Number(req.user!.userId);
     } else {
-      if (req.user!.role !== "admin") return sendError(res, 403, "Forbidden");
       userId = Number(idParam);
       if (isNaN(userId)) return sendError(res, 400, "Invalid user id");
+
+      // Permission check: only admin can add property to other users
+      if (req.user!.role !== "admin" && userId !== Number(req.user!.userId)) {
+        return sendError(res, 403, "Forbidden");
+      }
     }
 
     const created = await PropertyService.addPropertyForClientUser(userId, req.body);
@@ -72,11 +98,12 @@ export const addProperty = async (req: Request, res: Response) => {
   }
 };
 
+
 /**
  * @swagger
  * /api/properties/user/{userId}:
  *   post:
- *     summary: Añadir sede a un usuario específico (Admin)
+ *     summary: Añadir sede a un usuario específico (Admin, Cliente)
  *     tags: [Properties]
  *     security:
  *       - cookieAuth: []
@@ -97,35 +124,8 @@ export const addProperty = async (req: Request, res: Response) => {
  */
 // Handled by the same function (addProperty) in the router
 
-/**
- * @swagger
- * /api/properties/user/{userId}:
- *   get:
- *     summary: Obtener sedes de un usuario (Admin)
- *     tags: [Properties]
- *     security:
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: userId
- *         required: true
- *         schema: { type: string }
- *     responses:
- *       200:
- *         description: Lista de sedes del usuario
- */
-export const getUserProperties = async (req: Request, res: Response) => {
-  try {
-    const userId = Number(req.params.userId);
-    if (isNaN(userId)) return sendError(res, 400, "Invalid user id");
-    
-    const properties = await PropertyService.listByUserId(userId);
-    return sendSuccess(res, 200, "Properties retrieved", properties);
-  } catch (error: unknown) {
-    if (error instanceof AppError) return sendError(res, error.statusCode, error.message);
-    return sendError(res, 400, "Failed to fetch properties");
-  }
-};
+// getUserProperties doc moved to line 13-34 and updated to handle 'me'
+
 
 /**
  * @swagger
@@ -156,7 +156,7 @@ export const updateProperty = async (req: Request, res: Response) => {
     if (isNaN(propertyId)) return sendError(res, 400, "Invalid property id");
 
     const userId = req.user!.role === "admin" ? undefined : Number(req.user!.userId);
-    
+
     await PropertyService.updateProperty(propertyId, req.body, userId);
     return sendSuccess(res, 200, "Property updated");
   } catch (error: unknown) {

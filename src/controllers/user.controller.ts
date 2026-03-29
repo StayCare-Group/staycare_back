@@ -78,7 +78,17 @@ export const getAllUsers = async (req: Request, res: Response) => {
  *     tags: [Users]
  *     security:
  *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *         description: ID numérico del usuario
+ *     responses:
+ *       200:
+ *         description: Usuario encontrado
  */
+
 export const getUserById = async (req: Request, res: Response) => {
   try {
     const rawId = req.params.id;
@@ -104,7 +114,39 @@ export const getUserById = async (req: Request, res: Response) => {
  *     tags: [Users]
  *     security:
  *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *         description: ID numérico del usuario
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               email: { type: string }
+ *               phone: { type: string }
+ *               language: { type: string, enum: [en, es] }
+ *               password: { type: string }
+ *               is_active: { type: boolean }
+ *               client_profile:
+ *                 type: object
+ *                 properties:
+ *                   contact_person: { type: string }
+ *                   vat_number: { type: string }
+ *                   billing_address: { type: string }
+ *                   credits_terms_days: { type: integer }
+ *                   pricing_tier: { type: string, enum: [standard, premium, enterprise] }
+ *     responses:
+ *       200:
+ *         description: Usuario actualizado
  */
+
+
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const rawId = req.params.id;
@@ -131,7 +173,17 @@ export const updateUser = async (req: Request, res: Response) => {
  *     tags: [Users]
  *     security:
  *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *         description: ID numérico del usuario
+ *     responses:
+ *       200:
+ *         description: Usuario desactivado
  */
+
 export const deactivateUser = async (req: Request, res: Response) => {
   try {
     const rawId = req.params.id;

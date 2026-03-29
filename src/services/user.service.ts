@@ -25,7 +25,15 @@ export type UpdateUserByAdminBody = {
   phone?: string;
   language?: "en" | "es";
   is_active?: boolean;
+  client_profile?: {
+    contact_person?: string;
+    vat_number?: string;
+    billing_address?: string;
+    credits_terms_days?: number;
+    pricing_tier?: "standard" | "premium" | "enterprise";
+  };
 };
+
 
 /**
  * Dominio de **usuarios** (`users`): un cliente es un usuario con rol `client` y filas relacionadas
@@ -154,7 +162,8 @@ export class UserService {
     user: IUserMySQL;
     client_profile: Awaited<ReturnType<typeof ClientProfileRepository.findByUserId>>;
   }> {
-    const { password, ...rest } = body;
+    const { password, client_profile: profileToUpdate, ...rest } = body;
+
 
     const existing = await UserRepository.findById(rawId);
     if (!existing) throw new AppError("User not found", 404);
@@ -176,6 +185,15 @@ export class UserService {
 
     try {
       await UserRepository.update(rawId, updateData);
+
+      // Si es un cliente y viene información de perfil, actualizarla
+      if (existing.role === "client" && profileToUpdate) {
+        const currentProfile = await ClientProfileRepository.findByUserId(Number(rawId));
+        if (currentProfile?.id) {
+          await ClientProfileRepository.update(Number(currentProfile.id), profileToUpdate);
+        }
+      }
+
     } catch (err) {
       const dup = duplicateEntryMessage(err);
       if (dup) throw new AppError(dup, 409);

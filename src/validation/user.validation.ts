@@ -82,8 +82,18 @@ export const updateUserByAdminSchema = z.object({
     language: z.enum(["en", "es"]).optional(),
     password: z.string().min(6).optional(),
     is_active: z.boolean().optional(),
+    client_profile: z
+      .object({
+        contact_person: z.string().min(1).optional(),
+        vat_number: z.string().min(1).optional(),
+        billing_address: z.string().min(1).optional(),
+        credits_terms_days: z.number().int().positive().optional(),
+        pricing_tier: z.enum(["standard", "premium", "enterprise"]).optional(),
+      })
+      .optional(),
   }),
 });
+
 
 export type RegisterRequestBody = z.infer<typeof registerBodySchema>;
 export type RegisterClientBody = z.infer<typeof registerUserSchema>["body"];
