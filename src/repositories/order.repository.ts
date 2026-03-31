@@ -283,4 +283,12 @@ export class OrderRepository {
 
     return rows;
   }
+
+  static async existsByPropertyId(propertyId: number): Promise<boolean> {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT id FROM orders WHERE property_id = ? LIMIT 1`,
+      [propertyId]
+    );
+    return rows.length > 0;
+  }
 }

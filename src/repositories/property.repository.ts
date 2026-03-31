@@ -4,7 +4,7 @@ import pool from "../db/pool";
 
 export interface IPropertyRow {
   id?: number;
-  client_profile_id: number;
+  user_id: number;
   property_name: string;
   address: string;
   city: string;
@@ -17,7 +17,7 @@ export interface IPropertyRow {
 }
 
 export type PropertyInsertInput = {
-  client_profile_id: number;
+  user_id: number;
   property_name: string;
   address: string;
   city: string;
@@ -32,19 +32,19 @@ export class PropertyRepository {
     return conn ?? pool;
   }
 
-  static async listByClientProfileId(clientProfileId: number): Promise<IPropertyRow[]> {
+  static async listByUserId(userId: number): Promise<IPropertyRow[]> {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT id, client_profile_id, property_name, address, city, area,
+      `SELECT id, user_id, property_name, address, city, area,
               access_notes, lat, lng, created_at, updated_at
-       FROM properties WHERE client_profile_id = ? ORDER BY id ASC`,
-      [clientProfileId]
+       FROM properties WHERE user_id = ? ORDER BY id ASC`,
+      [userId]
     );
     return rows as IPropertyRow[];
   }
 
   static async findById(id: number): Promise<IPropertyRow | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT id, client_profile_id, property_name, address, city, area,
+      `SELECT id, user_id, property_name, address, city, area,
               access_notes, lat, lng, created_at, updated_at
        FROM properties WHERE id = ? LIMIT 1`,
       [id]
@@ -53,16 +53,16 @@ export class PropertyRepository {
   }
 
   static async findByLatLng(
-    clientProfileId: number,
+    userId: number,
     lat: string | number,
     lng: string | number
   ): Promise<IPropertyRow | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT id, client_profile_id, property_name, address, city, area,
+      `SELECT id, user_id, property_name, address, city, area,
               access_notes, lat, lng, created_at, updated_at
        FROM properties 
-       WHERE client_profile_id = ? AND lat = ? AND lng = ? LIMIT 1`,
-      [clientProfileId, String(lat), String(lng)]
+       WHERE user_id = ? AND lat = ? AND lng = ? LIMIT 1`,
+      [userId, String(lat), String(lng)]
     );
     return (rows[0] as IPropertyRow) || null;
   }
@@ -71,10 +71,10 @@ export class PropertyRepository {
     const exec = this.executor(conn);
     const [result] = await exec.execute<ResultSetHeader>(
       `INSERT INTO properties
-        (client_profile_id, property_name, address, city, area, access_notes, lat, lng)
+        (user_id, property_name, address, city, area, access_notes, lat, lng)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        row.client_profile_id,
+        row.user_id,
         row.property_name,
         row.address,
         row.city,

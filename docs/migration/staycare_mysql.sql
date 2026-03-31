@@ -197,7 +197,7 @@ COMMENT = 'Líneas de detalle de cada factura';
 -- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `staycare`.`properties` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `client_profile_id` INT UNSIGNED NOT NULL,
+  `user_id` INT UNSIGNED NOT NULL,
   `property_name` VARCHAR(200) NOT NULL,
   `address` VARCHAR(300) NOT NULL,
   `city` VARCHAR(100) NOT NULL,
@@ -208,10 +208,10 @@ CREATE TABLE IF NOT EXISTS `staycare`.`properties` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  INDEX `idx_properties_client` (`client_profile_id` ASC) VISIBLE,
-  CONSTRAINT `fk_properties_client_profile`
-    FOREIGN KEY (`client_profile_id`)
-    REFERENCES `staycare`.`client_profiles` (`id`)
+  INDEX `idx_properties_user` (`user_id` ASC) VISIBLE,
+  CONSTRAINT `fk_properties_user`
+    FOREIGN KEY (`user_id`)
+    REFERENCES `staycare`.`users` (`id`)
     ON DELETE CASCADE
     ON UPDATE CASCADE)
 ENGINE = InnoDB

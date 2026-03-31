@@ -1,37 +1,31 @@
 import { PropertyRepository, type PropertyInsertInput, type IPropertyRow } from "../repositories/property.repository";
-import { ClientProfileRepository } from "../repositories/clientProfile.repository";
+import { OrderRepository } from "../repositories/order.repository";
 import { UserRepository } from "../repositories/user.repository";
 import { AppError } from "../utils/AppError";
 import { duplicateEntryMessage } from "../utils/mysqlErrors";
 
 export class PropertyService {
   static async listByUserId(userId: number): Promise<IPropertyRow[]> {
-    const cpId = await this.getClientProfileIdForClientUserOrThrow(userId);
-    return await PropertyRepository.listByClientProfileId(cpId);
+    return await PropertyRepository.listByUserId(userId);
   }
 
   static async getById(id: number, userId?: number): Promise<IPropertyRow> {
     const prop = await PropertyRepository.findById(id);
     if (!prop) throw new AppError("Property not found", 404);
     
-    if (userId) {
-      const cpId = await this.getClientProfileIdForClientUserOrThrow(userId);
-      if (prop.client_profile_id !== cpId) {
-        throw new AppError("Forbidden", 403);
-      }
+    if (userId && prop.user_id !== userId) {
+      throw new AppError("Forbidden", 403);
     }
     return prop;
   }
 
   static async addPropertyForClientUser(
     userId: number,
-    input: Omit<PropertyInsertInput, "client_profile_id">
+    input: Omit<PropertyInsertInput, "user_id">
   ): Promise<IPropertyRow | null> {
-    const cpId = await this.getClientProfileIdForClientUserOrThrow(userId);
-    
     // Check for duplicates by lat/lng
     if (input.lat !== undefined && input.lng !== undefined && input.lat !== null && input.lng !== null) {
-      const existing = await PropertyRepository.findByLatLng(cpId, input.lat, input.lng);
+      const existing = await PropertyRepository.findByLatLng(userId, input.lat, input.lng);
       if (existing) {
         throw new AppError("Ya existe una sede con estas coordenadas para este cliente", 409);
       }
@@ -39,7 +33,7 @@ export class PropertyService {
 
     try {
       const row: PropertyInsertInput = {
-        client_profile_id: cpId,
+        user_id: userId,
         ...input,
       };
       const id = await PropertyRepository.insert(null, row);
@@ -59,11 +53,8 @@ export class PropertyService {
     const prop = await PropertyRepository.findById(propertyId);
     if (!prop) throw new AppError("Property not found", 404);
 
-    if (userId) {
-      const cpId = await this.getClientProfileIdForClientUserOrThrow(userId);
-      if (prop.client_profile_id !== cpId) {
-        throw new AppError("Forbidden", 403);
-      }
+    if (userId && prop.user_id !== userId) {
+      throw new AppError("Forbidden", 403);
     }
 
     // Check for duplicates by lat/lng if coordinates are changing
@@ -71,7 +62,7 @@ export class PropertyService {
     const newLng = data.lng !== undefined ? data.lng : prop.lng;
 
     if (newLat !== null && newLng !== null) {
-      const existing = await PropertyRepository.findByLatLng(prop.client_profile_id, newLat, newLng);
+      const existing = await PropertyRepository.findByLatLng(prop.user_id, newLat, newLng);
       if (existing && existing.id !== propertyId) {
         throw new AppError("Ya existe una sede con estas coordenadas para este cliente", 409);
       }
@@ -84,23 +75,16 @@ export class PropertyService {
     const prop = await PropertyRepository.findById(propertyId);
     if (!prop) throw new AppError("Property not found", 404);
 
-    if (userId) {
-      const cpId = await this.getClientProfileIdForClientUserOrThrow(userId);
-      if (prop.client_profile_id !== cpId) {
-        throw new AppError("Forbidden", 403);
-      }
+    if (userId && prop.user_id !== userId) {
+      throw new AppError("Forbidden", 403);
+    }
+
+    // Integrity Check: Cannot delete if associated with an order
+    const hasOrders = await OrderRepository.existsByPropertyId(propertyId);
+    if (hasOrders) {
+      throw new AppError("No se puede eliminar la sede porque tiene órdenes asociadas. Por seguridad, el historial de sedes debe mantenerse si ya ha sido utilizado.", 400);
     }
 
     await PropertyRepository.delete(propertyId);
-  }
-
-  private static async getClientProfileIdForClientUserOrThrow(userId: number): Promise<number> {
-    const user = await UserRepository.findById(userId);
-    if (!user) throw new AppError("User not found", 404);
-    // Note: Staff can have properties if needed or not, depends on biz rules. 
-    // Usually only clients have properties.
-    const profile = await ClientProfileRepository.findByUserId(userId);
-    if (!profile?.id) throw new AppError("No client profile for this user", 400);
-    return profile.id;
   }
 }
