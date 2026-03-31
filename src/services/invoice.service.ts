@@ -91,13 +91,8 @@ export class InvoiceService {
   }
 
   /**
-   * Resolves the client_id for a "client" role user.
-   * Returns null if no profile is found.
+   * (Removed getClientIdForUser as it is no longer needed with the user_id standardization)
    */
-  static async getClientIdForUser(userId: number): Promise<number | null> {
-    const profile = await ClientProfileRepository.findByUserId(userId);
-    return profile?.id ?? null;
-  }
 
   static async recordPayment(
     invoiceId: number,

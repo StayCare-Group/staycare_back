@@ -52,7 +52,7 @@ export class ReportRepository {
       "SELECT COUNT(*) as total FROM orders WHERE status NOT IN ('Delivered', 'Completed', 'Invoiced')"
     );
     const [clientsCount] = await pool.execute<RowDataPacket[]>(
-      "SELECT COUNT(*) as total FROM client_profiles"
+      "SELECT COUNT(*) as total FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = 'client'"
     );
     const [driversCount] = await pool.execute<RowDataPacket[]>(
       "SELECT COUNT(*) as total FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = 'driver' AND u.is_active = 1"
@@ -108,13 +108,15 @@ export class ReportRepository {
   static async getTopClients(limit: number): Promise<ClientStats[]> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT
-        cp.id as clientId,
-        cp.company_name as clientName,
+        u.id as clientId,
+        u.name as clientName,
         COUNT(o.id) as totalOrders,
-        SUM(o.total) as totalRevenue
-      FROM client_profiles cp
-      LEFT JOIN orders o ON cp.id = o.client_id
-      GROUP BY cp.id, cp.company_name
+        SUM(IFNULL(o.total, 0)) as totalRevenue
+      FROM users u
+      JOIN roles r ON u.role_id = r.id
+      LEFT JOIN orders o ON u.id = o.client_id
+      WHERE r.name = 'client'
+      GROUP BY u.id, u.name
       ORDER BY totalRevenue DESC
       LIMIT ?`,
       [limit]

@@ -89,10 +89,11 @@ export class RouteRepository {
 
     const [orders] = await pool.execute<RowDataPacket[]>(
       `SELECT ro.order_id, ro.position, o.order_number, o.status,
-              cp.company_name as client_company, cp.contact_person as client_contact, cp.phone as client_phone
+              u.name as client_company, cp.contact_person as client_contact, u.phone as client_phone
        FROM route_orders ro
        JOIN orders o ON ro.order_id = o.id
-       JOIN client_profiles cp ON o.client_id = cp.id
+       JOIN users u ON o.client_id = u.id
+       LEFT JOIN client_profiles cp ON u.id = cp.user_id
        WHERE ro.route_id = ?
        ORDER BY ro.position ASC`,
       [id]

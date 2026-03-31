@@ -84,7 +84,7 @@ export class UserRegistrationService {
 
         for (const p of payload.properties ?? []) {
           const row: PropertyInsertInput = {
-            client_profile_id: profileId,
+            user_id: uid,
             property_name: p.property_name,
             address: p.address,
             city: p.city,
@@ -143,7 +143,7 @@ export class UserRegistrationService {
         });
         for (const p of payload.properties ?? []) {
           const row: PropertyInsertInput = {
-            client_profile_id: profileId,
+            user_id: uid,
             property_name: p.property_name,
             address: p.address,
             city: p.city,

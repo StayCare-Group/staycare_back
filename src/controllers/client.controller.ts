@@ -10,6 +10,7 @@ import { AppError } from "../utils/AppError";
  * /api/clients:
  *   get:
  *     summary: Listar todos los perfiles de cliente (admin)
+ *     description: Lista usuarios con rol 'client' junto a su perfil opcional.
  *     tags: [Clients]
  *     security:
  *       - cookieAuth: []
@@ -55,16 +56,16 @@ export const getAllClients = async (req: Request, res: Response) => {
 
 export const getClientById = async (req: Request, res: Response) => {
   try {
-    const clientProfileId = Number(req.params.id);
-    if (isNaN(clientProfileId)) return sendError(res, 400, "Invalid client ID");
+    const userId = Number(req.params.id);
+    if (isNaN(userId)) return sendError(res, 400, "Invalid user ID");
     
     // Check ownership if client
     if (req.user!.role === "client") {
-      const isOwner = await UserService.userOwnsClientProfile(req.user!.userId, clientProfileId);
+      const isOwner = await UserService.userOwnsProfile(req.user!.userId, userId);
       if (!isOwner) return sendError(res, 403, "Forbidden");
     }
 
-    const detail = await UserService.getUserDetailByClientProfileId(clientProfileId);
+    const detail = await UserService.getUserDetailByUserId(userId);
     if (!detail) return sendError(res, 404, "Client not found");
     return sendSuccess(res, 200, "Client retrieved", detail);
   } catch (error: unknown) {
@@ -75,16 +76,16 @@ export const getClientById = async (req: Request, res: Response) => {
 
 export const updateClient = async (req: Request, res: Response) => {
   try {
-    const clientProfileId = Number(req.params.id);
-    if (isNaN(clientProfileId)) return sendError(res, 400, "Invalid client ID");
+    const userId = Number(req.params.id);
+    if (isNaN(userId)) return sendError(res, 400, "Invalid user ID");
 
     // Check ownership if client
     if (req.user!.role === "client") {
-      const isOwner = await UserService.userOwnsClientProfile(req.user!.userId, clientProfileId);
+      const isOwner = await UserService.userOwnsProfile(req.user!.userId, userId);
       if (!isOwner) return sendError(res, 403, "Forbidden");
     }
 
-    await UserService.updateClientProfile(clientProfileId, req.body);
+    await UserService.updateClientProfile(userId, req.body);
     return sendSuccess(res, 200, "Client updated");
   } catch (error: unknown) {
     if (error instanceof AppError) return sendError(res, error.statusCode, error.message);
@@ -94,10 +95,10 @@ export const updateClient = async (req: Request, res: Response) => {
 
 export const deleteClient = async (req: Request, res: Response) => {
   try {
-    const clientProfileId = Number(req.params.id);
-    if (isNaN(clientProfileId)) return sendError(res, 400, "Invalid client ID");
+    const userId = Number(req.params.id);
+    if (isNaN(userId)) return sendError(res, 400, "Invalid user ID");
     
-    await UserService.deleteUserByClientProfileId(clientProfileId);
+    await UserService.deleteUserById(userId);
     return sendSuccess(res, 200, "Client deleted");
   } catch (error: unknown) {
     if (error instanceof AppError) return sendError(res, error.statusCode, error.message);

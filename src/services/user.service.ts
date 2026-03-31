@@ -49,28 +49,23 @@ export class UserService {
   }
 
 
-  static async getUserDetailByClientProfileId(clientProfileId: number): Promise<{
-    client_profile: IClientProfileRow;
+  static async getUserDetailByUserId(userId: number): Promise<{
+    client_profile: IClientProfileRow | null;
     user: IUserMySQL;
   } | null> {
-    const profile = await ClientProfileRepository.findById(clientProfileId);
-    if (!profile?.user_id) return null;
-    const user = await UserRepository.findById(profile.user_id);
+    const user = await UserRepository.findById(userId);
     if (!user) return null;
+    const profile = await ClientProfileRepository.findByUserId(userId);
     return { client_profile: profile, user };
   }
 
-  static async userOwnsClientProfile(userIdStr: string, clientProfileId: number): Promise<boolean> {
-    const uid = Number(userIdStr);
-    const ownerUserId = await ClientProfileRepository.findUserIdByProfileId(clientProfileId);
-    return ownerUserId !== null && ownerUserId === uid;
+  static async userOwnsProfile(authUserId: string | number, targetUserId: number): Promise<boolean> {
+    return Number(authUserId) === targetUserId;
   }
 
-  static async updateClientProfile(clientProfileId: number, body: UpdateClientProfileBody): Promise<void> {
-    const profile = await ClientProfileRepository.findById(clientProfileId);
-    if (!profile) throw new AppError("Client not found", 404);
-
-    const userId = profile.user_id;
+  static async updateClientProfile(userId: number, body: UpdateClientProfileBody): Promise<void> {
+    const user = await UserRepository.findById(userId);
+    if (!user) throw new AppError("User not found", 404);
 
     if (body.email) {
       const existing = await UserRepository.findByEmail(body.email);
@@ -100,8 +95,10 @@ export class UserService {
 
     try {
       if (Object.keys(userPatch).length) await UserRepository.update(userId, userPatch);
-      if (Object.keys(profilePatch).length) {
-        await ClientProfileRepository.update(clientProfileId, profilePatch);
+      
+      const profile = await ClientProfileRepository.findByUserId(userId);
+      if (Object.keys(profilePatch).length && profile?.id) {
+        await ClientProfileRepository.update(profile.id, profilePatch);
       }
     } catch (err) {
       const dup = duplicateEntryMessage(err);
@@ -110,22 +107,19 @@ export class UserService {
     }
   }
 
-  static async deleteUserByClientProfileId(clientProfileId: number): Promise<void> {
-    const userId = await ClientProfileRepository.findUserIdByProfileId(clientProfileId);
-    if (userId === null) throw new AppError("Client not found", 404);
+  static async deleteUserById(userId: number): Promise<void> {
+    const user = await UserRepository.findById(userId);
+    if (!user) throw new AppError("User not found", 404);
     await UserRepository.deleteById(userId);
   }
 
-  /** Resuelve `users.id` → `client_profiles.id` (solo rol `client` con perfil). */
-  static async getClientProfileIdForClientUserOrThrow(userId: number): Promise<number> {
+  /** Resuelve `users.id` → (Legacy check, now just ensures role is client). */
+  static async ensureClientRoleOrThrow(userId: number): Promise<void> {
     const user = await UserRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
     if (user.role !== "client") {
       throw new AppError("Properties apply only to users with client role", 400);
     }
-    const profile = await ClientProfileRepository.findByUserId(userId);
-    if (!profile?.id) throw new AppError("No client profile for this user", 400);
-    return profile.id;
   }
 
   // --- Gestión directa por `users.id` (rutas /api/users) ---
@@ -157,7 +151,7 @@ export class UserService {
     if (user.role === "client") {
       client_profile = await ClientProfileRepository.findByUserId(user.id!);
       if (client_profile?.id) {
-        properties = await PropertyRepository.listByClientProfileId(client_profile.id);
+        properties = await PropertyRepository.listByUserId(user.id!);
       }
     }
 
@@ -216,7 +210,7 @@ export class UserService {
     if (user.role === "client") {
       client_profile = await ClientProfileRepository.findByUserId(user.id!);
       if (client_profile?.id) {
-        properties = await PropertyRepository.listByClientProfileId(client_profile.id);
+        properties = await PropertyRepository.listByUserId(user.id!);
       }
     }
 

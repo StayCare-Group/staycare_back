@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS `staycare`.`invoices` (
   INDEX `idx_invoices_client_status` (`client_id` ASC, `status` ASC) VISIBLE,
   CONSTRAINT `fk_invoices_client`
     FOREIGN KEY (`client_id`)
-    REFERENCES `staycare`.`client_profiles` (`id`)
+    REFERENCES `staycare`.`users` (`id`)
     ON DELETE RESTRICT
     ON UPDATE CASCADE)
 ENGINE = InnoDB

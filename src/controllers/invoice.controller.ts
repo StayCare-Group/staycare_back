@@ -78,11 +78,9 @@ export const getAllInvoices = async (req: Request, res: Response) => {
       search: search as string,
     };
 
-    // If client role, force client_id
+    // If client role, force client_id to the authenticated user's ID
     if (req.user!.role === "client") {
-      const dbClientId = await InvoiceService.getClientIdForUser(Number(req.user!.userId));
-      if (!dbClientId) return sendError(res, 403, "Client profile not found");
-      filter.client_id = dbClientId;
+      filter.client_id = Number(req.user!.userId);
     }
 
     const { invoices, total } = await InvoiceService.getAllInvoices(filter as any, limit, skip);
@@ -111,8 +109,8 @@ export const getInvoiceById = async (req: Request, res: Response) => {
 
     // Authorization check for client role
     if (req.user!.role === "client") {
-      const clientId = await InvoiceService.getClientIdForUser(Number(req.user!.userId));
-      if (!clientId || invoice.client_id !== clientId) {
+      const authUserId = Number(req.user!.userId);
+      if (invoice.client_id !== authUserId) {
         return sendError(res, 403, "Forbidden");
       }
     }

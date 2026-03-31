@@ -55,8 +55,8 @@ export class InvoiceRepository {
               u.name AS client_name,
               cp.contact_person
        FROM invoices i
-       INNER JOIN client_profiles cp ON i.client_id = cp.id
-       INNER JOIN users u ON cp.user_id = u.id
+       INNER JOIN users u ON i.client_id = u.id
+       LEFT JOIN client_profiles cp ON cp.user_id = u.id
        WHERE i.id = ? LIMIT 1`,
       [id]
     );
@@ -203,8 +203,8 @@ export class InvoiceRepository {
               u.name AS client_name,
               cp.contact_person
        FROM invoices i
-       INNER JOIN client_profiles cp ON i.client_id = cp.id
-       INNER JOIN users u ON cp.user_id = u.id
+       INNER JOIN users u ON i.client_id = u.id
+       LEFT JOIN client_profiles cp ON cp.user_id = u.id
        WHERE ${where}
        ORDER BY i.created_at DESC
        LIMIT ? OFFSET ?`,
@@ -244,7 +244,7 @@ export class InvoiceRepository {
 
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT COUNT(*) AS total FROM invoices i 
-       INNER JOIN client_profiles cp ON i.client_id = cp.id 
+       INNER JOIN users u ON i.client_id = u.id 
        WHERE ${where}`,
       params
     );
