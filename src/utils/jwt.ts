@@ -56,7 +56,7 @@ export const verifyRefreshToken = (token: string): RefreshTokenPayload => {
 const isProduction = process.env.NODE_ENV === "production";
 const baseCookieOptions: CookieOptions = {
   httpOnly: true,
-  sameSite: isProduction ? "none" : "strict",
+  sameSite: isProduction ? "none" : "lax",
   secure: isProduction,
 };
 

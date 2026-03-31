@@ -23,7 +23,7 @@ export class OrderService {
       if (!order || !order.client_id) return;
       
       const [uRows]: any = await pool.execute(
-        "SELECT u.email, cp.contact_person FROM users u INNER JOIN client_profiles cp ON u.id = cp.user_id WHERE cp.id = ?",
+        "SELECT email, name as contact_person FROM users WHERE id = ?",
         [order.client_id]
       );
       const user = uRows[0];
@@ -65,19 +65,15 @@ export class OrderService {
 
       let clientId = data.client_id;
       if (role === "client") {
-        const profile = await ClientProfileRepository.findByUserId(userId);
-        if (!profile) {
-          throw new Error("Your account has no linked client profile.");
-        }
-        clientId = profile.id;
+        clientId = userId;
       } else {
         if (!clientId) {
-          throw new Error("A client_id is required to create an order as admin/staff.");
+          throw new Error("A client_id (user ID) is required to create an order as admin/staff.");
         }
-        // Verify client exists
-        const client = await ClientProfileRepository.findById(clientId);
-        if (!client) {
-          throw new Error(`Client with ID ${clientId} not found.`);
+        // Verify user exists
+        const [user]: any = await pool.execute("SELECT id FROM users WHERE id = ?", [clientId]);
+        if (user.length === 0) {
+          throw new Error(`Client (User) with ID ${clientId} not found.`);
         }
       }
 

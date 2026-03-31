@@ -54,12 +54,12 @@ export class OrderRepository {
   static async findById(id: number | string): Promise<(IOrderMySQL & { client_name?: string; driver_name?: string; property_name?: string }) | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT o.*, 
-              cp.contact_person as client_name,
-              u.name as driver_name,
+              u.name as client_name,
+              du.name as driver_name,
               p.property_name
        FROM orders o
-       INNER JOIN client_profiles cp ON o.client_id = cp.id
-       LEFT JOIN users u ON o.driver_id = u.id
+       INNER JOIN users u ON o.client_id = u.id
+       LEFT JOIN users du ON o.driver_id = du.id
        LEFT JOIN properties p ON o.property_id = p.id
        WHERE o.id = ? LIMIT 1`,
       [id]
@@ -200,14 +200,14 @@ export class OrderRepository {
       params.push(filter.pickup_to);
     }
     if (filter.search) {
-      where += " AND (o.order_number LIKE ? OR cp.contact_person LIKE ?)";
+      where += " AND (o.order_number LIKE ? OR u.name LIKE ?)";
       const pattern = `%${filter.search}%`;
       params.push(pattern, pattern);
     }
 
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT COUNT(*) as total FROM orders o 
-       INNER JOIN client_profiles cp ON o.client_id = cp.id 
+       INNER JOIN users u ON o.client_id = u.id 
        WHERE ${where}`,
       params
     );
@@ -258,7 +258,7 @@ export class OrderRepository {
       params.push(filter.pickup_to);
     }
     if (filter.search) {
-      where += " AND (o.order_number LIKE ? OR cp.contact_person LIKE ?)";
+      where += " AND (o.order_number LIKE ? OR u.name LIKE ?)";
       const pattern = `%${filter.search}%`;
       params.push(pattern, pattern);
     }
@@ -267,12 +267,12 @@ export class OrderRepository {
 
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT o.*, 
-              cp.contact_person as client_name,
-              u.name as driver_name,
+              u.name as client_name,
+              du.name as driver_name,
               p.property_name
        FROM orders o
-       INNER JOIN client_profiles cp ON o.client_id = cp.id
-       LEFT JOIN users u ON o.driver_id = u.id
+       INNER JOIN users u ON o.client_id = u.id
+       LEFT JOIN users du ON o.driver_id = du.id
        LEFT JOIN properties p ON o.property_id = p.id
        WHERE ${where}
        ORDER BY o.created_at DESC

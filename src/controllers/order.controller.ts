@@ -144,7 +144,7 @@ export const getAllOrders = async (req: Request, res: Response) => {
     // 2. Driver: Ver todas sus órdenes activas (no entregadas/finalizadas)
     if (req.user!.role === "driver") {
       filter.driver_id = Number(req.user!.userId);
-      
+
       // Si el driver no especifica un estado puntual, le mostramos todo lo "abierto"
       if (!status) {
         filter.status = [
@@ -159,7 +159,7 @@ export const getAllOrders = async (req: Request, res: Response) => {
           OrderStatus.COLLECTED,
           OrderStatus.RESCHEDULED
         ];
-        
+
         // El driver debe ver todo lo abierto sin importar la fecha
         delete filter.from;
         delete filter.to;
