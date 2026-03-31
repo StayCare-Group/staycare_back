@@ -16,7 +16,6 @@ export const updateClientSchema = z.object({
     contact_person: z.string().min(1).optional(),
     email: z.string().email().optional(),
     phone: z.string().min(1).optional().nullable(),
-    vat_number: z.string().min(1).optional(),
     billing_address: z.string().min(1).optional(),
     credits_terms_days: z.number().int().positive().optional(),
     pricing_tier: z.enum(["standard", "premium", "enterprise"]).optional(),

@@ -4,6 +4,7 @@ import { UserRepository } from "../repositories/user.repository";
 import { RoleRepository } from "../repositories/role.repository";
 import { generateInviteToken } from "../utils/crypto";
 import { sendInvitationEmail } from "../utils/mail";
+import { AppError } from "../utils/AppError";
 import {
   signAccessToken,
   signRefreshToken,
@@ -27,7 +28,7 @@ export class InvitationService {
     // Check if user already exists
     const existing = await UserRepository.findByEmail(email);
     if (existing) {
-      throw Object.assign(new Error("A user with this email already exists"), { status: 409 });
+      throw new AppError("El correo electrónico ya está registrado en el sistema", 409);
     }
 
     const conn = await pool.getConnection();
@@ -81,11 +82,11 @@ export class InvitationService {
     const invitation = await InvitationRepository.findByToken(token);
 
     if (!invitation || invitation.used) {
-      throw Object.assign(new Error("Invitation not found or already used"), { status: 404 });
+      throw new AppError("Invitation not found or already used", 404);
     }
 
     if (invitation.expires_at < new Date()) {
-      throw Object.assign(new Error("Invitation has expired"), { status: 410 });
+      throw new AppError("Invitation has expired", 410);
     }
 
     return {
@@ -102,15 +103,15 @@ export class InvitationService {
     const invitation = await InvitationRepository.findByToken(token);
 
     if (!invitation || invitation.used) {
-      throw Object.assign(new Error("Invitation not found or already used"), { status: 404 });
+      throw new AppError("Invitation not found or already used", 404);
     }
     if (invitation.expires_at < new Date()) {
-      throw Object.assign(new Error("Invitation has expired"), { status: 410 });
+      throw new AppError("Invitation has expired", 410);
     }
 
     const existingUser = await UserRepository.findByEmail(invitation.email);
     if (existingUser) {
-      throw Object.assign(new Error("A user with this email already exists"), { status: 409 });
+      throw new AppError("El correo electrónico ya está registrado en el sistema", 409);
     }
 
     const roleId = await RoleRepository.getIdByName(invitation.role as any);

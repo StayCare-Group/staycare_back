@@ -55,7 +55,6 @@ CREATE TABLE client_profiles (
   id                  INT UNSIGNED      NOT NULL AUTO_INCREMENT,
   user_id             INT UNSIGNED      NOT NULL,
   contact_person      VARCHAR(150)      NOT NULL,
-  vat_number          VARCHAR(50)       NOT NULL,
   billing_address     TEXT              NOT NULL,
   credits_terms_days  SMALLINT UNSIGNED NOT NULL DEFAULT 30,
   pricing_tier        ENUM('standard','premium','enterprise') NOT NULL DEFAULT 'standard',
@@ -64,7 +63,6 @@ CREATE TABLE client_profiles (
 
   PRIMARY KEY (id),
   UNIQUE KEY uq_client_profiles_user (user_id),
-  UNIQUE KEY uq_client_profiles_vat (vat_number),
 
   CONSTRAINT fk_client_profiles_user
     FOREIGN KEY (user_id) REFERENCES users (id)

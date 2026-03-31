@@ -39,10 +39,9 @@ const options: swaggerJsdoc.Options = {
       schemas: {
         ClientProfileInput: {
           type: "object",
-          required: ["contact_person", "vat_number", "billing_address"],
+          required: ["contact_person", "billing_address"],
           properties: {
             contact_person: { type: "string" },
-            vat_number: { type: "string" },
             billing_address: { type: "string" },
             credits_terms_days: { type: "integer", minimum: 1 },
             pricing_tier: {
@@ -98,7 +97,6 @@ const options: swaggerJsdoc.Options = {
             contact_person: { type: "string" },
             email: { type: "string" },
             phone: { type: "string", nullable: true },
-            vat_number: { type: "string" },
             billing_address: { type: "string" },
             credits_terms_days: { type: "integer" },
             pricing_tier: {

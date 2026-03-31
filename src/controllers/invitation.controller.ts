@@ -84,7 +84,7 @@ export const createInvitation = async (req: Request, res: Response) => {
 
     return sendSuccess(res, 201, message, { invitation: result.invitation });
   } catch (error: any) {
-    const status = error.status ?? 400;
+    const status = error.statusCode ?? error.status ?? 400;
     return sendError(res, status, error.message || "Failed to create invitation");
   }
 };
@@ -131,7 +131,7 @@ export const validateInvitation = async (req: Request, res: Response) => {
     const data = await InvitationService.validateInvitation(token);
     return sendSuccess(res, 200, "Invitation is valid", { invitation: data });
   } catch (error: any) {
-    const status = error.status ?? 400;
+    const status = error.statusCode ?? error.status ?? 400;
     return sendError(res, status, error.message || "Failed to validate invitation");
   }
 };
@@ -222,7 +222,7 @@ export const registerViaInvitation = async (req: Request, res: Response) => {
 
     return sendSuccess(res, 201, "Account created successfully", { user: result.user });
   } catch (error: any) {
-    const status = error.status ?? 400;
+    const status = error.statusCode ?? error.status ?? 400;
     return sendError(res, status, error.message || "Registration failed");
   }
 };

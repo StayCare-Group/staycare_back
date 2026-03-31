@@ -3,7 +3,6 @@ import { propertySchema } from "./client.validation";
 
 const clientProfileSchema = z.object({
   contact_person: z.string().min(1, "contact_person is required"),
-  vat_number: z.string().min(1, "vat_number is required"),
   billing_address: z.string().min(1, "billing_address is required"),
   credits_terms_days: z.number().int().positive().max(3650).optional(),
   pricing_tier: z.enum(["standard", "premium", "enterprise"]).optional(),
@@ -21,15 +20,7 @@ const registerBodySchema = z
     properties: z.array(propertySchema).optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.role === "client") {
-      if (!data.client_profile) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "client_profile is required when role is client",
-          path: ["client_profile"],
-        });
-      }
-    } else {
+    if (data.role !== "client") {
       if (data.client_profile !== undefined) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -42,6 +33,15 @@ const registerBodySchema = z
           code: z.ZodIssueCode.custom,
           message: "properties are only allowed when role is client",
           path: ["properties"],
+        });
+      }
+    } else {
+      // If role is client, but no profile is provided, properties cannot be provided either
+      if (!data.client_profile && data.properties && data.properties.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "client_profile is required if properties are provided",
+          path: ["client_profile"],
         });
       }
     }
@@ -85,7 +85,6 @@ export const updateUserByAdminSchema = z.object({
     client_profile: z
       .object({
         contact_person: z.string().min(1).optional(),
-        vat_number: z.string().min(1).optional(),
         billing_address: z.string().min(1).optional(),
         credits_terms_days: z.number().int().positive().optional(),
         pricing_tier: z.enum(["standard", "premium", "enterprise"]).optional(),

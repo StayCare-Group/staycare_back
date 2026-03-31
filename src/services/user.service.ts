@@ -12,7 +12,6 @@ export type UpdateClientProfileBody = {
   contact_person?: string;
   email?: string;
   phone?: string | null;
-  vat_number?: string;
   billing_address?: string;
   credits_terms_days?: number;
   pricing_tier?: "standard" | "premium" | "enterprise";
@@ -27,7 +26,6 @@ export type UpdateUserByAdminBody = {
   is_active?: boolean;
   client_profile?: {
     contact_person?: string;
-    vat_number?: string;
     billing_address?: string;
     credits_terms_days?: number;
     pricing_tier?: "standard" | "premium" | "enterprise";
@@ -87,11 +85,6 @@ export class UserService {
       }
     }
 
-    if (body.vat_number && body.vat_number !== profile.vat_number) {
-      if (await ClientProfileRepository.existsByVatNumber(body.vat_number)) {
-        throw new AppError("VAT number already in use", 409);
-      }
-    }
 
     const userPatch: Parameters<typeof UserRepository.update>[1] = {};
     if (body.company_name !== undefined) userPatch.name = body.company_name;
@@ -100,7 +93,6 @@ export class UserService {
 
     const profilePatch: Parameters<typeof ClientProfileRepository.update>[1] = {};
     if (body.contact_person !== undefined) profilePatch.contact_person = body.contact_person;
-    if (body.vat_number !== undefined) profilePatch.vat_number = body.vat_number;
     if (body.billing_address !== undefined) profilePatch.billing_address = body.billing_address;
     if (body.credits_terms_days !== undefined) profilePatch.credits_terms_days = body.credits_terms_days;
     if (body.pricing_tier !== undefined) profilePatch.pricing_tier = body.pricing_tier;

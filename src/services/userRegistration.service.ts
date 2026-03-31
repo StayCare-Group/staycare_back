@@ -12,7 +12,6 @@ const SALT_ROUNDS = 10;
 
 export type ClientProfileInput = {
   contact_person: string;
-  vat_number: string;
   billing_address: string;
   credits_terms_days?: number;
   pricing_tier?: "standard" | "premium" | "enterprise";
@@ -34,7 +33,7 @@ export type RegisterClientPayload = {
   password: string;
   phone: string;
   language: "en" | "es";
-  client_profile: ClientProfileInput;
+  client_profile?: ClientProfileInput;
   properties?: PropertyCreateRow[];
 };
 
@@ -57,9 +56,6 @@ export class UserRegistrationService {
     const existingPhone = await UserRepository.findByPhone(payload.phone);
     if (existingPhone) throw new AppError("Phone already in use", 409);
 
-    const vatTaken = await ClientProfileRepository.existsByVatNumber(payload.client_profile.vat_number);
-    if (vatTaken) throw new AppError("VAT number already in use", 409);
-
     const roleId = await RoleRepository.getIdByName("client");
     const password_hash = await bcrypt.hash(payload.password, SALT_ROUNDS);
 
@@ -72,30 +68,33 @@ export class UserRegistrationService {
         language: payload.language,
         role_id: roleId,
       });
-      const profileId = await ClientProfileRepository.insert(conn, {
-        user_id: uid,
-        contact_person: payload.client_profile.contact_person,
-        vat_number: payload.client_profile.vat_number,
-        billing_address: payload.client_profile.billing_address,
-        ...(payload.client_profile.credits_terms_days !== undefined
-          ? { credits_terms_days: payload.client_profile.credits_terms_days }
-          : {}),
-        ...(payload.client_profile.pricing_tier !== undefined
-          ? { pricing_tier: payload.client_profile.pricing_tier }
-          : {}),
-      });
-      for (const p of payload.properties ?? []) {
-        const row: PropertyInsertInput = {
-          client_profile_id: profileId,
-          property_name: p.property_name,
-          address: p.address,
-          city: p.city,
-          area: p.area,
-          access_notes: p.access_notes ?? null,
-          lat: p.lat ?? null,
-          lng: p.lng ?? null,
-        };
-        await PropertyRepository.insert(conn, row);
+
+      if (payload.client_profile) {
+        const profileId = await ClientProfileRepository.insert(conn, {
+          user_id: uid,
+          contact_person: payload.client_profile.contact_person,
+          billing_address: payload.client_profile.billing_address,
+          ...(payload.client_profile.credits_terms_days !== undefined
+            ? { credits_terms_days: payload.client_profile.credits_terms_days }
+            : {}),
+          ...(payload.client_profile.pricing_tier !== undefined
+            ? { pricing_tier: payload.client_profile.pricing_tier }
+            : {}),
+        });
+
+        for (const p of payload.properties ?? []) {
+          const row: PropertyInsertInput = {
+            client_profile_id: profileId,
+            property_name: p.property_name,
+            address: p.address,
+            city: p.city,
+            area: p.area,
+            access_notes: p.access_notes ?? null,
+            lat: p.lat ?? null,
+            lng: p.lng ?? null,
+          };
+          await PropertyRepository.insert(conn, row);
+        }
       }
       return uid;
     });
@@ -112,14 +111,10 @@ export class UserRegistrationService {
     const existingPhone = await UserRepository.findByPhone(payload.phone);
     if (existingPhone) throw new AppError("Phone already in use", 409);
 
-    if (payload.role === "client") {
-      if (!payload.client_profile) {
-        throw new AppError("client_profile is required for client role", 400);
+    if (payload.role !== "client") {
+      if (payload.client_profile) {
+        throw new AppError("client_profile is only allowed for client role", 400);
       }
-      const vatTaken = await ClientProfileRepository.existsByVatNumber(payload.client_profile.vat_number);
-      if (vatTaken) throw new AppError("VAT number already in use", 409);
-    } else if (payload.client_profile) {
-      throw new AppError("client_profile is only allowed for client role", 400);
     }
 
     const roleId = await RoleRepository.getIdByName(payload.role);
@@ -138,7 +133,6 @@ export class UserRegistrationService {
         const profileId = await ClientProfileRepository.insert(conn, {
           user_id: uid,
           contact_person: payload.client_profile.contact_person,
-          vat_number: payload.client_profile.vat_number,
           billing_address: payload.client_profile.billing_address,
           ...(payload.client_profile.credits_terms_days !== undefined
             ? { credits_terms_days: payload.client_profile.credits_terms_days }
