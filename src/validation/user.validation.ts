@@ -71,6 +71,8 @@ export const updateMeSchema = z.object({
     email: z.string().email().optional(),
     phone: z.string().optional(),
     language: z.enum(["en", "es"]).optional(),
+    contact_person: z.string().optional(),
+    billing_address: z.string().optional(),
   }),
 });
 
