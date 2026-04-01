@@ -3,6 +3,27 @@ import type { PoolConnection } from "mysql2/promise";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import pool from "../db/pool";
 
+function toDbOrderStatus(status: unknown): unknown {
+  if (typeof status !== "string") return status;
+  const normalized = status.trim().toLowerCase();
+  const map: Record<string, string> = {
+    pending: "Pending",
+    assigned: "Assigned",
+    transit: "Transit",
+    arrived: "Arrived",
+    washing: "Washing",
+    drying: "Drying",
+    ironing: "Ironing",
+    quality_check: "QualityCheck",
+    ready_to_delivery: "ReadyToDeliver",
+    collected: "Collected",
+    delivered: "Delivered",
+    invoiced: "Invoiced",
+    completed: "Completed",
+  };
+  return map[normalized] ?? status;
+}
+
 export interface IOrderMySQL {
   id: number;
   order_number: string;
@@ -84,6 +105,7 @@ export class OrderRepository {
   }
 
   static async insert(conn: PoolConnection, data: Omit<IOrderMySQL, "id" | "created_at" | "updated_at">): Promise<number> {
+    const dbStatus = toDbOrderStatus(data.status);
     const [result] = await conn.execute<ResultSetHeader>(
       `INSERT INTO orders (
         order_number, client_id, property_id, driver_id, service_type, 
@@ -94,7 +116,7 @@ export class OrderRepository {
       [
         data.order_number, data.client_id, data.property_id, data.driver_id, data.service_type,
         data.pickup_date, data.pickup_window_start, data.pickup_window_end,
-        data.estimated_bags, data.actual_bags, data.staff_confirmed_bags, data.special_notes, data.status,
+        data.estimated_bags, data.actual_bags, data.staff_confirmed_bags, data.special_notes, dbStatus,
         data.subtotal, data.vat_percentage, data.vat_amount, data.total
       ]
     );
@@ -141,7 +163,12 @@ export class OrderRepository {
   }
 
   static async update(id: number | string, data: Partial<IOrderMySQL>, conn?: PoolConnection): Promise<void> {
-    const entries = Object.entries(data).filter(([k]) => k !== "id");
+    const nextData: Partial<IOrderMySQL> = { ...data };
+    if (nextData.status) {
+      nextData.status = toDbOrderStatus(nextData.status) as OrderStatus;
+    }
+
+    const entries = Object.entries(nextData).filter(([k]) => k !== "id");
     if (entries.length === 0) return;
 
     const setClause = entries.map(([k]) => `${k} = ?`).join(", ");

@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { UserRepository, IUserMySQL } from "../repositories/user.repository";
+import { ClientProfileRepository } from "../repositories/clientProfile.repository";
 import { PasswordResetRepository } from "../repositories/passwordReset.repository";
 import { AppError } from "../utils/AppError";
 import { generateAuthTokens, AuthTokens } from "../utils/auth.helper";
@@ -82,8 +83,23 @@ export class AuthService {
     return { user, accessToken: tokens.accessToken };
   }
 
-  static async updateMe(userId: number, data: Partial<IUserMySQL>): Promise<IUserMySQL> {
+  static async updateMe(
+    userId: number,
+    data: Partial<IUserMySQL> & { contact_person?: string; billing_address?: string }
+  ): Promise<IUserMySQL> {
     await UserRepository.update(userId, data);
+
+    const hasProfilePatch = data.contact_person !== undefined || data.billing_address !== undefined;
+    if (hasProfilePatch) {
+      const profile = await ClientProfileRepository.findByUserId(userId);
+      if (profile?.id) {
+        await ClientProfileRepository.update(profile.id, {
+          ...(data.contact_person !== undefined ? { contact_person: data.contact_person } : {}),
+          ...(data.billing_address !== undefined ? { billing_address: data.billing_address } : {}),
+        });
+      }
+    }
+
     const user = await UserRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
     return user;
