@@ -10,7 +10,7 @@ export enum OrderStatus {
   READY_TO_DELIVERY = "ready_to_delivery",
   COLLECTED = "collected",
   DELIVERED = "delivered",
-  INVOICED = "invoiced",
+  INVOICED = "facturado",
   COMPLETED = "completed",
   CANCELLED = "cancelled",
   RESCHEDULED = "rescheduled",

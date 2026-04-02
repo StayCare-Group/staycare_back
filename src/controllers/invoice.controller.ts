@@ -60,7 +60,7 @@ export const createInvoice = async (req: Request, res: Response) => {
       vat_percentage,
       vat_amount,
       total,
-    });
+    }, Number(req.user!.userId));
 
     return sendSuccess(res, 201, "Invoice created", invoice);
   } catch (error: any) {
@@ -243,7 +243,7 @@ export const recordPayment = async (req: Request, res: Response) => {
       amount: Number(amount),
       method,
       transaction_reference,
-    });
+    }, Number(req.user!.userId));
 
     return sendSuccess(res, 200, "Payment recorded", invoice);
   } catch (error: any) {
