@@ -14,9 +14,14 @@ const poolOptions: mysql.PoolOptions = {
   multipleStatements: false,          // prevención extra contra SQL injection
 };
 
-// En producción (Render/Aiven), la base de datos externa requiere SSL.
-if (config.app.env !== 'development') {
+// Forzamos SSL si el host es externo (no localhost)
+const isLocal = config.db.host === 'localhost' || config.db.host === '127.0.0.1';
+
+if (!isLocal) {
+  console.log(`[DB] Aplicando configuración SSL para host externo: ${config.db.host}`);
   poolOptions.ssl = { rejectUnauthorized: false };
+} else {
+  console.log(`[DB] Conectando sin SSL a host local: ${config.db.host}`);
 }
 
 const pool = mysql.createPool(poolOptions);
