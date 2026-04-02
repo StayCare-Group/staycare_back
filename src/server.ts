@@ -1,8 +1,8 @@
 import app from "./app";
-
 import pool from "./db/pool";
+import { config } from "./config";
 
-const PORT = process.env.PORT || 5000;
+const PORT = config.app.port;
 
 // Test MySQL connection at startup
 pool.getConnection()

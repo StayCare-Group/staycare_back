@@ -19,10 +19,11 @@ import reportRoutes from "./routes/report.routes";
 import { errorHandler } from "./middleware/errorHandler";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./config/swagger";
+import { config } from "./config";
 
 const app = express();
 
-const corsOrigin = process.env.CLIENT_URL || "http://localhost:3000";
+const corsOrigin = config.app.clientUrl;
 
 app.use(
   cors({

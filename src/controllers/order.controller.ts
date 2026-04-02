@@ -3,6 +3,7 @@ import { OrderService } from "../services/order.service";
 import { OrderStatus } from "../types/orderStatus";
 import { sendSuccess, sendError } from "../utils/response";
 import { parsePagination, paginationMeta } from "../utils/paginate";
+import { AppError } from "../utils/AppError";
 
 /**
  * @swagger
@@ -507,9 +508,10 @@ export const reassignOrder = async (req: Request, res: Response) => {
  *                 type: array
  *                 items:
  *                   type: object
- *                   required: [id, qty_good, qty_bad, qty_stained]
+ *                   required: [item_id, quantity, qty_good, qty_bad, qty_stained]
  *                   properties:
- *                     id: { type: integer, description: "ID del order_item" }
+ *                     item_id: { type: integer, description: "ID del catálogo de artículos" }
+ *                     quantity: { type: integer, description: "Cantidad total recibida" }
  *                     qty_good: { type: integer }
  *                     qty_bad: { type: integer }
  *                     qty_stained: { type: integer }
@@ -529,5 +531,59 @@ export const receiveOrder = async (req: Request, res: Response) => {
     return sendSuccess(res, 200, "Order received in plant and inventory recorded", order);
   } catch (error: any) {
     return sendError(res, 400, error.message || "Reception failed");
+  }
+};
+
+/**
+ * @swagger
+ * /api/orders/{id}/deliver:
+ *   patch:
+ *     summary: Confirmar recogida o entrega del conductor
+ *     description: |
+ *       Endpoint específico para conductores asignados. El sistema determina automáticamente si es recogida
+ *       (`transit`) o entrega (`delivered`) según el estado actual de la orden.
+ *       **Restricción**: Solo el conductor asignado o un admin pueden realizar esta acción.
+ *     tags: [Orders]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               actual_bags: { type: integer }
+ *               notes: { type: string }
+ *               photos:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     url: { type: string }
+ *     responses:
+ *       200:
+ *         description: Recogida/Entrega confirmada
+ *       403:
+ *         description: No es el conductor asignado
+ *       400:
+ *         description: Estado inválido para confirmar
+ */
+export const confirmDelivery = async (req: Request, res: Response) => {
+  try {
+    const orderId = Number(req.params.id);
+    if (isNaN(orderId)) return sendError(res, 400, "Invalid order ID");
+
+    const userId = Number(req.user!.userId);
+    const order = await OrderService.confirmDriverAction(orderId, userId, req.user!.role, req.body);
+
+    return sendSuccess(res, 200, "Driver action confirmed", order);
+  } catch (error: any) {
+    if (error instanceof AppError) return sendError(res, error.statusCode, error.message);
+    return sendError(res, 400, error.message || "Driver confirmation failed");
   }
 };

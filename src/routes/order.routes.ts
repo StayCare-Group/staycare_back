@@ -9,6 +9,7 @@ import {
   rescheduleOrder,
   reassignOrder,
   receiveOrder,
+  confirmDelivery,
 } from "../controllers/order.controller";
 import { validate } from "../middleware/validate";
 import {
@@ -16,6 +17,7 @@ import {
   updateOrderSchema,
   advanceStatusSchema,
   rescheduleOrderSchema,
+  confirmDriverActionSchema,
 } from "../validation/order.validation";
 import { authenticate } from "../middleware/authenticate";
 import { authorize } from "../middleware/authorize";
@@ -70,6 +72,13 @@ router.patch(
   "/:id/receive",
   authorize("admin", "staff"),
   receiveOrder,
+);
+
+router.patch(
+  "/:id/deliver",
+  authorize("admin", "driver"),
+  validate(confirmDriverActionSchema),
+  confirmDelivery,
 );
 
 // ─── Delete ───────────────────────────────────────────────────────────────────

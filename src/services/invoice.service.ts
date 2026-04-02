@@ -27,7 +27,7 @@ export class InvoiceService {
     vat_percentage: number;
     vat_amount: number;
     total: number;
-  }) {
+  }, userId: number) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -59,6 +59,13 @@ export class InvoiceService {
       for (const orderId of data.order_ids) {
         await InvoiceRepository.linkOrder(conn, invoiceId, orderId);
         await OrderRepository.update(orderId, { status: OrderStatus.INVOICED }, conn);
+        await OrderRepository.insertHistory(conn, {
+          order_id: orderId,
+          changed_by_user_id: userId,
+          is_system: false,
+          status: OrderStatus.INVOICED,
+          note: `Invoiced via invoice #${invoiceNumber}`,
+        });
       }
 
       await conn.commit();
@@ -100,7 +107,8 @@ export class InvoiceService {
       amount: number;
       method: "cash" | "bank_transfer" | "card";
       transaction_reference: string;
-    }
+    },
+    userId: number
   ) {
     const invoice = await InvoiceRepository.findById(invoiceId);
     if (!invoice) {
@@ -127,6 +135,13 @@ export class InvoiceService {
         // Mark all linked orders as COMPLETED
         for (const order of invoice.orders) {
           await OrderRepository.update(order.id, { status: OrderStatus.COMPLETED }, conn);
+          await OrderRepository.insertHistory(conn, {
+            order_id: order.id,
+            changed_by_user_id: userId,
+            is_system: false,
+            status: OrderStatus.COMPLETED,
+            note: "Order completed (Invoice fully paid)",
+          });
         }
       }
 

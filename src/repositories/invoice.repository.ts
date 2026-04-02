@@ -52,6 +52,7 @@ export class InvoiceRepository {
   > {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT i.*,
+              i.client_id AS client,
               u.name AS client_name,
               cp.contact_person
        FROM invoices i
@@ -200,8 +201,13 @@ export class InvoiceRepository {
 
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT i.*,
+              i.client_id AS client,
               u.name AS client_name,
-              cp.contact_person
+              cp.contact_person,
+              (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', o.id, 'order_number', o.order_number, 'status', o.status)) 
+               FROM orders o 
+               INNER JOIN invoice_orders io ON io.order_id = o.id 
+               WHERE io.invoice_id = i.id) AS orders
        FROM invoices i
        INNER JOIN users u ON i.client_id = u.id
        LEFT JOIN client_profiles cp ON cp.user_id = u.id

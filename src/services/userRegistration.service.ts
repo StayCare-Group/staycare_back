@@ -32,7 +32,7 @@ export type RegisterClientPayload = {
   email: string;
   password: string;
   phone: string;
-  language: "en" | "es";
+  language?: "en" | "es";
   client_profile?: ClientProfileInput;
   properties?: PropertyCreateRow[];
 };
@@ -42,7 +42,7 @@ export type AdminCreateUserPayload = {
   email: string;
   password: string;
   phone: string;
-  language: "en" | "es";
+  language?: "en" | "es";
   role: UserRole;
   client_profile?: ClientProfileInput;
   properties?: PropertyCreateRow[];

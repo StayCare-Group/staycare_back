@@ -3,7 +3,7 @@ import type { PoolConnection } from "mysql2/promise";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
 import pool from "../db/pool";
 
-function toDbOrderStatus(status: unknown): unknown {
+function toDbOrderStatus(status: unknown): string | any {
   if (typeof status !== "string") return status;
   const normalized = status.trim().toLowerCase();
   const map: Record<string, string> = {
@@ -45,6 +45,8 @@ export interface IOrderMySQL {
   total: number;
   created_at: Date;
   updated_at: Date;
+  property_address?: string;
+  property_area?: string;
 }
 
 export interface IOrderItemMySQL {
@@ -77,7 +79,9 @@ export class OrderRepository {
       `SELECT o.*, 
               u.name as client_name,
               du.name as driver_name,
-              p.property_name
+              p.property_name,
+              p.address as property_address,
+              p.area as property_area
        FROM orders o
        INNER JOIN users u ON o.client_id = u.id
        LEFT JOIN users du ON o.driver_id = du.id
@@ -121,6 +125,10 @@ export class OrderRepository {
       ]
     );
     return result.insertId;
+  }
+
+  static async deleteItemsByOrderId(conn: PoolConnection, orderId: number): Promise<void> {
+    await conn.execute("DELETE FROM order_items WHERE order_id = ?", [orderId]);
   }
 
   static async insertItem(conn: PoolConnection, item: Omit<IOrderItemMySQL, "id">): Promise<number> {
@@ -296,7 +304,9 @@ export class OrderRepository {
       `SELECT o.*, 
               u.name as client_name,
               du.name as driver_name,
-              p.property_name
+              p.property_name,
+              p.address as property_address,
+              p.area as property_area
        FROM orders o
        INNER JOIN users u ON o.client_id = u.id
        LEFT JOIN users du ON o.driver_id = du.id

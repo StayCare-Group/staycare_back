@@ -133,7 +133,7 @@ export class InvitationService {
         email: invitation.email,
         password_hash,
         phone: data.phone ?? null,
-        language: data.language ?? "es",
+        language: data.language ?? "en",
         role_id: roleId,
         is_active: true,
       });
@@ -160,7 +160,7 @@ export class InvitationService {
           name: data.name,
           email: invitation.email,
           role: tokenRole,
-          language: data.language ?? "es",
+          language: data.language ?? "en",
         },
       };
     } catch (error) {

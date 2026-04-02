@@ -3,20 +3,64 @@ import { InvoiceService } from "../services/invoice.service";
 import { sendSuccess, sendError } from "../utils/response";
 import { parsePagination, paginationMeta } from "../utils/paginate";
 
+/**
+ * @swagger
+ * /api/invoices:
+ *   post:
+ *     summary: Crear una nueva factura
+ *     tags: [Invoices]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [client, orders, due_date, line_items, subtotal, vat_amount, total]
+ *             properties:
+ *               client:
+ *                 type: integer
+ *               orders:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *               due_date:
+ *                 type: string
+ *                 format: date
+ *               line_items:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     description: { type: string }
+ *                     quantity: { type: integer }
+ *                     unit_price: { type: number }
+ *                     total_price: { type: number }
+ *               subtotal: { type: number }
+ *               vat_percentage: { type: number, default: 18 }
+ *               vat_amount: { type: number }
+ *               total: { type: number }
+ *     responses:
+ *       201:
+ *         description: Factura creada exitosamente
+ *       400:
+ *         description: Error en la creación de la factura
+ */
 export const createInvoice = async (req: Request, res: Response) => {
   try {
-    const { client_id, order_ids, due_date, line_items, subtotal, vat_percentage, vat_amount, total } = req.body;
+    const { client, orders, due_date, line_items, subtotal, vat_percentage, vat_amount, total } = req.body;
 
     const invoice = await InvoiceService.createInvoice({
-      client_id: Number(client_id),
-      order_ids: (order_ids as any[]).map(Number),
-      due_date,
+      client_id: Number(client),
+      order_ids: (orders as any[]).map(Number),
+      due_date: due_date.slice(0, 10), // Extract YYYY-MM-DD
       line_items,
       subtotal,
       vat_percentage,
       vat_amount,
       total,
-    });
+    }, Number(req.user!.userId));
 
     return sendSuccess(res, 201, "Invoice created", invoice);
   } catch (error: any) {
@@ -85,12 +129,21 @@ export const getAllInvoices = async (req: Request, res: Response) => {
 
     const { invoices, total } = await InvoiceService.getAllInvoices(filter as any, limit, skip);
 
+    // Transform to match the POST structure
+    const formattedInvoices = invoices.map((inv: any) => {
+      const { client_id, ...rest } = inv;
+      return {
+        ...rest,
+        // client already renamed to 'client' in repository SQL
+        orders: inv.orders || [],
+      };
+    });
 
     return sendSuccess(
       res,
       200,
       "Invoices retrieved",
-      invoices,
+      formattedInvoices,
       paginationMeta(total, page, limit)
     );
   } catch (error) {
@@ -99,6 +152,28 @@ export const getAllInvoices = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * @swagger
+ * /api/invoices/{id}:
+ *   get:
+ *     summary: Obtener detalle de una factura
+ *     tags: [Invoices]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Detalle de la factura
+ *       403:
+ *         description: Prohibido (solo dueño o admin)
+ *       404:
+ *         description: Factura no encontrada
+ */
 export const getInvoiceById = async (req: Request, res: Response) => {
   try {
     const invoiceId = Number(req.params.id);
@@ -106,6 +181,9 @@ export const getInvoiceById = async (req: Request, res: Response) => {
 
     const invoice = await InvoiceService.getInvoiceById(invoiceId);
     if (!invoice) return sendError(res, 404, "Invoice not found");
+
+    // Return full objects for orders
+    const { client_id, ...formattedInvoice } = invoice as any;
 
     // Authorization check for client role
     if (req.user!.role === "client") {
@@ -115,12 +193,45 @@ export const getInvoiceById = async (req: Request, res: Response) => {
       }
     }
 
-    return sendSuccess(res, 200, "Invoice retrieved", invoice);
+    return sendSuccess(res, 200, "Invoice retrieved", formattedInvoice);
   } catch (error: any) {
     return sendError(res, 400, error.message || "Failed to fetch invoice");
   }
 };
 
+/**
+ * @swagger
+ * /api/invoices/{id}/payments:
+ *   post:
+ *     summary: Registrar un pago para una factura
+ *     tags: [Invoices]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [amount, method, transaction_reference]
+ *             properties:
+ *               amount: { type: number }
+ *               method: { type: string, enum: [cash, bank_transfer, card] }
+ *               transaction_reference: { type: string }
+ *     responses:
+ *       200:
+ *         description: Pago registrado exitosamente
+ *       400:
+ *         description: Error al registrar el pago
+ *       404:
+ *         description: Factura no encontrada
+ */
 export const recordPayment = async (req: Request, res: Response) => {
   try {
     const invoiceId = Number(req.params.id);
@@ -132,7 +243,7 @@ export const recordPayment = async (req: Request, res: Response) => {
       amount: Number(amount),
       method,
       transaction_reference,
-    });
+    }, Number(req.user!.userId));
 
     return sendSuccess(res, 200, "Payment recorded", invoice);
   } catch (error: any) {
@@ -141,6 +252,20 @@ export const recordPayment = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * @swagger
+ * /api/invoices/mark-overdue:
+ *   post:
+ *     summary: Marcar facturas vencidas (Admin)
+ *     tags: [Invoices]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Facturas actualizadas
+ *       400:
+ *         description: Error al actualizar
+ */
 export const markOverdue = async (_req: Request, res: Response) => {
   try {
     const affectedRows = await InvoiceService.markOverdue();

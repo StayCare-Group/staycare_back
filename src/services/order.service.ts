@@ -5,6 +5,9 @@ import { ItemRepository } from "../repositories/item.repository";
 import { OrderStatus } from "../types/orderStatus";
 import { sendOrderStatusEmail } from "../utils/mail";
 import { PoolConnection } from "mysql2/promise";
+import { AppError } from "../utils/AppError";
+
+const EXPRESS_SURCHARGE = 25.0;
 
 export class OrderService {
   private static async notifyClientOfStatus(orderId: number, newStatus: OrderStatus): Promise<void> {
@@ -106,7 +109,8 @@ export class OrderService {
       }
 
       const vatAmount = parseFloat((subtotal * (vatPercentage / 100)).toFixed(2));
-      const total = parseFloat((subtotal + vatAmount).toFixed(2));
+      const surcharge = (data.service_type === "express") ? EXPRESS_SURCHARGE : 0;
+      const total = parseFloat((subtotal + vatAmount + surcharge).toFixed(2));
 
       const orderData: Omit<IOrderMySQL, "id" | "created_at" | "updated_at"> = {
         order_number: orderNumber,
@@ -168,40 +172,74 @@ export class OrderService {
   static async receiveInPlant(
     orderId: number, 
     userId: number, 
-    data: { staff_confirmed_bags: number; items: { id: number; qty_good: number; qty_bad: number; qty_stained: number }[] }
+    data: { 
+      staff_confirmed_bags: number; 
+      items: { item_id: number; quantity: number; qty_good: number; qty_bad: number; qty_stained: number }[] 
+    }
   ) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
 
-      // 1. Update order status and confirmed bags
-      await OrderRepository.update(orderId, {
-        status: OrderStatus.ARRIVED,
-        staff_confirmed_bags: data.staff_confirmed_bags,
-      }, conn);
+      const order = await OrderRepository.findById(orderId);
+      if (!order) throw new Error("Order not found");
 
-      // 2. Update each order item with counts
+      // 1. Clear existing items
+      await OrderRepository.deleteItemsByOrderId(conn, orderId);
+
+      // 2. Re-calculate financials based on staff-provided items
+      let subtotal = 0;
+      const vatPercentage = 18;
+      
       if (data.items && Array.isArray(data.items)) {
-        for (const itemData of data.items) {
-          await OrderRepository.updateItem(conn, itemData.id, {
-            qty_good: itemData.qty_good,
-            qty_bad: itemData.qty_bad,
-            qty_stained: itemData.qty_stained,
+        for (const item of data.items) {
+          const itemDef = await ItemRepository.findById(item.item_id);
+          if (!itemDef) {
+            throw new Error(`Item with ID ${item.item_id} not found during staff reception.`);
+          }
+          const unitPrice = itemDef.base_price;
+          const totalPrice = unitPrice * item.quantity;
+          subtotal += totalPrice;
+
+          await OrderRepository.insertItem(conn, {
+            order_id: orderId,
+            item_id: item.item_id,
+            item_code_snapshot: itemDef.item_code,
+            name_snapshot: itemDef.name,
+            quantity: item.quantity,
+            unit_price: unitPrice,
+            total_price: totalPrice,
+            qty_good: item.qty_good || 0,
+            qty_bad: item.qty_bad || 0,
+            qty_stained: item.qty_stained || 0,
           });
         }
       }
 
-      // 3. Record history
+      const vatAmount = parseFloat((subtotal * (vatPercentage / 100)).toFixed(2));
+      const surcharge = (order.service_type === "express") ? EXPRESS_SURCHARGE : 0;
+      const total = parseFloat((subtotal + vatAmount + surcharge).toFixed(2));
+
+      // 3. Update order status, confirmed bags, and financials
+      await OrderRepository.update(orderId, {
+        status: OrderStatus.ARRIVED,
+        staff_confirmed_bags: data.staff_confirmed_bags,
+        subtotal,
+        vat_amount: vatAmount,
+        total,
+      }, conn);
+
+      // 4. Record history
       await OrderRepository.insertHistory(conn, {
         order_id: orderId,
         changed_by_user_id: userId,
         is_system: false,
         status: OrderStatus.ARRIVED,
-        note: "Inventory verified by staff in plant",
+        note: "Inventory verified and order value finalized by staff in plant",
       });
 
       await conn.commit();
-      return await OrderRepository.findById(orderId);
+      return await this.getOrderById(orderId);
     } catch (error) {
       await conn.rollback();
       throw error;
@@ -367,6 +405,29 @@ export class OrderService {
     } finally {
       conn.release();
     }
+  }
+
+  static async confirmDriverAction(orderId: number, userId: number, role: string, data: any) {
+    const order = await OrderRepository.findById(orderId);
+    if (!order) throw new AppError("Order not found", 404);
+
+    // Permission check: if not admin, must be the assigned driver
+    if (role === "driver" && order.driver_id !== userId) {
+      throw new AppError("Forbidden: You are not the assigned driver for this order.", 403);
+    }
+
+    // Determine action based on current status
+    if (order.status === OrderStatus.ASSIGNED) {
+      // Driver is starting to collect (pickup)
+      return this.confirmPickup(orderId, data, userId, role);
+    } 
+    
+    if (order.status === OrderStatus.READY_TO_DELIVERY || order.status === OrderStatus.COLLECTED) {
+      // Driver is delivering to client
+      return this.confirmDelivery(orderId, data, userId, role);
+    }
+
+    throw new AppError(`Current order status (${order.status}) does not allow driver confirmation action.`, 400);
   }
 
   static async confirmDelivery(orderId: number, data: any, userId: number, role: string) {

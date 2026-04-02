@@ -57,7 +57,7 @@ export class UserRepository {
       email: string;
       password_hash: string;
       phone: string | null;
-      language: "en" | "es";
+      language?: "en" | "es" | undefined;
       role_id: number;
       is_active?: boolean;
     }
@@ -70,7 +70,7 @@ export class UserRepository {
         user.email,
         user.password_hash,
         user.phone,
-        user.language,
+        user.language || "en",
         user.role_id,
         user.is_active !== undefined ? user.is_active : true,
       ]

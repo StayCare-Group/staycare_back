@@ -92,3 +92,14 @@ export const rescheduleOrderSchema = z.object({
   }),
   params: z.object({ id: z.string() }),
 });
+
+export const confirmDriverActionSchema = z.object({
+  body: z.object({
+    actual_bags: z.number().int().positive().optional(),
+    photos: z
+      .array(z.object({ url: z.string().url() }))
+      .optional(),
+    notes: z.string().optional(),
+  }),
+  params: z.object({ id: z.string() }),
+});
