@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { config } from "../config/index";
 import { OrderStatus } from "../types/orderStatus";
 
 let transporter: nodemailer.Transporter | null = null;
@@ -6,12 +7,12 @@ let transporter: nodemailer.Transporter | null = null;
 function getTransporter() {
   if (!transporter) {
     transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: parseInt(process.env.SMTP_PORT || "587", 10),
-      secure: process.env.SMTP_SECURE === "true",
+      host: config.smtp.host,
+      port: config.smtp.port,
+      secure: config.smtp.secure,
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: config.smtp.user,
+        pass: config.smtp.pass,
       },
     });
   }
@@ -19,7 +20,11 @@ function getTransporter() {
 }
 
 function isMailConfigured(): boolean {
-  return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+  const configured = !!(config.smtp.user && config.smtp.pass);
+  if (!configured) {
+    console.warn("[MAIL] Email sending is skipped: SMTP_USER or SMTP_PASS not set in environment.");
+  }
+  return configured;
 }
 
 export async function sendInvitationEmail(
