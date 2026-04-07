@@ -39,6 +39,7 @@ export interface IOrderMySQL {
   staff_confirmed_bags: number | null;
   special_notes: string | null;
   status: OrderStatus;
+  is_invoiced: boolean;
   subtotal: number;
   vat_percentage: number;
   vat_amount: number;
@@ -115,13 +116,13 @@ export class OrderRepository {
         order_number, client_id, property_id, driver_id, service_type, 
         pickup_date, pickup_window_start, pickup_window_end, 
         estimated_bags, actual_bags, staff_confirmed_bags, special_notes, status, 
-        subtotal, vat_percentage, vat_amount, total
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        is_invoiced, subtotal, vat_percentage, vat_amount, total
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.order_number, data.client_id, data.property_id, data.driver_id, data.service_type,
         data.pickup_date, data.pickup_window_start, data.pickup_window_end,
         data.estimated_bags, data.actual_bags, data.staff_confirmed_bags, data.special_notes, dbStatus,
-        data.subtotal, data.vat_percentage, data.vat_amount, data.total
+        data.is_invoiced ? 1 : 0, data.subtotal, data.vat_percentage, data.vat_amount, data.total
       ]
     );
     return result.insertId;
@@ -180,7 +181,7 @@ export class OrderRepository {
     if (entries.length === 0) return;
 
     const setClause = entries.map(([k]) => `${k} = ?`).join(", ");
-    const values = entries.map(([, v]) => v);
+    const values = entries.map(([, v]) => (typeof v === "boolean" ? (v ? 1 : 0) : v));
     values.push(id);
 
     const exec = conn || pool;
@@ -205,6 +206,10 @@ export class OrderRepository {
         where += " AND o.status = ?";
         params.push(filter.status);
       }
+    }
+    if (filter.is_invoiced !== undefined) {
+      where += " AND o.is_invoiced = ?";
+      params.push(filter.is_invoiced ? 1 : 0);
     }
     if (filter.client_id) {
       where += " AND o.client_id = ?";
@@ -263,6 +268,10 @@ export class OrderRepository {
         where += " AND o.status = ?";
         params.push(filter.status);
       }
+    }
+    if (filter.is_invoiced !== undefined) {
+      where += " AND o.is_invoiced = ?";
+      params.push(filter.is_invoiced ? 1 : 0);
     }
     if (filter.client_id) {
       where += " AND o.client_id = ?";

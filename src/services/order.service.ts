@@ -145,6 +145,7 @@ export class OrderService {
         staff_confirmed_bags: null,
         special_notes: data.special_notes || null,
         status: OrderStatus.PENDING,
+        is_invoiced: false,
         subtotal,
         vat_percentage: vatPercentage,
         vat_amount: vatAmount,
@@ -644,9 +645,9 @@ export class OrderService {
       case OrderStatus.DELIVERED:
         return this.confirmDelivery(orderId, payload, userId, role);
 
-      default:
+    default:
         // Covers: pending, washing, drying, ironing, quality_check,
-        //         ready_to_delivery, assigned, cancelled, invoiced, completed
+        //         ready_to_delivery, assigned, cancelled, completed
         return this.updateStatus(orderId, status, userId, role, payload.note ?? payload.notes);
     }
   }

@@ -49,7 +49,7 @@ export class ReportRepository {
       [today]
     );
     const [activeCount] = await pool.execute<RowDataPacket[]>(
-      "SELECT COUNT(*) as total FROM orders WHERE status NOT IN ('Delivered', 'Completed', 'Invoiced')"
+      "SELECT COUNT(*) as total FROM orders WHERE status NOT IN ('Delivered', 'Completed')"
     );
     const [clientsCount] = await pool.execute<RowDataPacket[]>(
       "SELECT COUNT(*) as total FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = 'client'"
@@ -140,7 +140,7 @@ export class ReportRepository {
         h.changed_at
       FROM orders o
       JOIN order_status_history h ON o.id = h.order_id
-      WHERE o.status IN ('Delivered', 'Completed', 'Invoiced')
+      WHERE o.status IN ('Delivered', 'Completed')
       ORDER BY o.id, h.changed_at ASC`
     );
 

@@ -99,7 +99,11 @@ export const createOrder = async (req: Request, res: Response) => {
  *         name: status
  *         schema:
  *           type: string
- *           enum: [pending, assigned, transit, arrived, washing, drying, ironing, quality_check, ready_to_delivery, collected, delivered, invoiced, completed, cancelled, rescheduled]
+ *           enum: [pending, assigned, transit, arrived, washing, drying, ironing, quality_check, ready_to_delivery, collected, delivered, completed, cancelled, rescheduled]
+ *       - in: query
+ *         name: is_invoiced
+ *         schema: { type: boolean }
+ *         description: Filtrar por órdenes facturadas o no.
  *       - in: query
  *         name: client_id
  *         schema: { type: integer }
@@ -297,7 +301,7 @@ export const updateOrder = async (req: Request, res: Response) => {
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [pending, assigned, transit, arrived, washing, drying, ironing, quality_check, ready_to_delivery, collected, delivered, invoiced, completed, cancelled]
+ *                 enum: [pending, assigned, transit, arrived, washing, drying, ironing, quality_check, ready_to_delivery, collected, delivered, completed, cancelled]
  *               actual_bags:
  *                 type: integer
  *                 description: Requerido cuando status = transit

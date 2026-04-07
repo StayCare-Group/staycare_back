@@ -58,13 +58,13 @@ export class InvoiceService {
       // Link orders and mark them as INVOICED
       for (const orderId of data.order_ids) {
         await InvoiceRepository.linkOrder(conn, invoiceId, orderId);
-        await OrderRepository.update(orderId, { status: OrderStatus.INVOICED }, conn);
+        await OrderRepository.update(orderId, { is_invoiced: true }, conn);
         await OrderRepository.insertHistory(conn, {
           order_id: orderId,
           changed_by_user_id: userId,
           is_system: false,
-          status: OrderStatus.INVOICED,
-          note: `Invoiced via invoice #${invoiceNumber}`,
+          status: OrderStatus.COMPLETED, // Suggestion: Use COMPLETED or keep current
+          note: `Billed via invoice #${invoiceNumber}`,
         });
       }
 
