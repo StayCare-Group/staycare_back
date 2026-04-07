@@ -540,7 +540,8 @@ INSERT INTO `staycare`.`roles` (`id`, `name`) VALUES
 (1, 'admin'),
 (2, 'staff'),
 (3, 'driver'),
-(4, 'client')
+(4, 'client'),
+(5, 'operator')
 ON DUPLICATE KEY UPDATE name=name;
 
 -- -----------------------------------------------------

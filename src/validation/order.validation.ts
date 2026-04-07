@@ -23,7 +23,8 @@ export const createOrderSchema = z.object({
     }),
     estimated_bags: z.number().int().positive().optional(),
     special_notes: z.string().optional(),
-    items: z.array(orderItemSchema).min(1), // Require at least one item
+    items: z.array(orderItemSchema).optional(), // Los ítems se pueden omitir y confirmar al recibir en planta
+
   }),
 });
 

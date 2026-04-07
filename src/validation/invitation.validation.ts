@@ -3,8 +3,8 @@ import { z } from "zod";
 export const createInvitationSchema = z.object({
   body: z.object({
     email: z.string().email("Invalid email"),
-    role: z.enum(["admin", "driver", "staff"], {
-      message: "Role must be admin, driver, or staff",
+    role: z.enum(["admin", "driver", "staff", "operator"], {
+      message: "Role must be admin, driver, staff, or operator",
     }),
   }),
 });

@@ -12,6 +12,7 @@ const SALT_ROUNDS = 10;
 
 export type ClientProfileInput = {
   contact_person: string;
+  vat_number: string;
   billing_address: string;
   credits_terms_days?: number;
   pricing_tier?: "standard" | "premium" | "enterprise";
@@ -73,6 +74,7 @@ export class UserRegistrationService {
         const profileId = await ClientProfileRepository.insert(conn, {
           user_id: uid,
           contact_person: payload.client_profile.contact_person,
+          vat_number: payload.client_profile.vat_number,
           billing_address: payload.client_profile.billing_address,
           ...(payload.client_profile.credits_terms_days !== undefined
             ? { credits_terms_days: payload.client_profile.credits_terms_days }
@@ -133,6 +135,7 @@ export class UserRegistrationService {
         const profileId = await ClientProfileRepository.insert(conn, {
           user_id: uid,
           contact_person: payload.client_profile.contact_person,
+          vat_number: payload.client_profile.vat_number,
           billing_address: payload.client_profile.billing_address,
           ...(payload.client_profile.credits_terms_days !== undefined
             ? { credits_terms_days: payload.client_profile.credits_terms_days }

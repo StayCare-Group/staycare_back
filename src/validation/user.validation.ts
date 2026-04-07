@@ -3,6 +3,7 @@ import { propertySchema } from "./client.validation";
 
 const clientProfileSchema = z.object({
   contact_person: z.string().min(1, "contact_person is required"),
+  vat_number: z.string().min(1, "vat_number is required"),
   billing_address: z.string().min(1, "billing_address is required"),
   credits_terms_days: z.number().int().positive().max(3650).optional(),
   pricing_tier: z.enum(["standard", "premium", "enterprise"]).optional(),
@@ -15,7 +16,7 @@ const registerBodySchema = z
     password: z.string().min(6, "Password must be at least 6 characters"),
     phone: z.string().min(1, "phone is required"),
     language: z.enum(["en", "es"]),
-    role: z.enum(["admin", "staff", "client", "driver"]).optional().default("client"),
+    role: z.enum(["admin", "staff", "client", "driver", "operator"]).optional().default("client"),
     client_profile: clientProfileSchema.optional(),
     properties: z.array(propertySchema).optional(),
   })
@@ -72,6 +73,7 @@ export const updateMeSchema = z.object({
     phone: z.string().optional(),
     language: z.enum(["en", "es"]).optional(),
     contact_person: z.string().optional(),
+    vat_number: z.string().optional(),
     billing_address: z.string().optional(),
   }),
 });
@@ -87,6 +89,7 @@ export const updateUserByAdminSchema = z.object({
     client_profile: z
       .object({
         contact_person: z.string().min(1).optional(),
+        vat_number: z.string().min(1).optional(),
         billing_address: z.string().min(1).optional(),
         credits_terms_days: z.number().int().positive().optional(),
         pricing_tier: z.enum(["standard", "premium", "enterprise"]).optional(),

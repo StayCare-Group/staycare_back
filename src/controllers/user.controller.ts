@@ -137,6 +137,7 @@ export const getUserById = async (req: Request, res: Response) => {
  *                 type: object
  *                 properties:
  *                   contact_person: { type: string }
+ *                   vat_number: { type: string }
  *                   billing_address: { type: string }
  *                   credits_terms_days: { type: integer }
  *                   pricing_tier: { type: string, enum: [standard, premium, enterprise] }
