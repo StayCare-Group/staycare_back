@@ -90,7 +90,9 @@ export class OrderRepository {
        WHERE o.id = ? LIMIT 1`,
       [id]
     );
-    return (rows[0] as IOrderMySQL) || null;
+    if (!rows[0]) return null;
+    const row = rows[0] as any;
+    return { ...row, is_invoiced: Boolean(row.is_invoiced) } as IOrderMySQL;
   }
 
   static async findItemsByOrderId(orderId: number | string): Promise<IOrderItemMySQL[]> {
@@ -327,7 +329,10 @@ export class OrderRepository {
     );
 
 
-    return rows;
+    return rows.map((r: any) => ({
+      ...r,
+      is_invoiced: Boolean(r.is_invoiced)
+    }));
   }
 
   static async existsByPropertyId(propertyId: number): Promise<boolean> {

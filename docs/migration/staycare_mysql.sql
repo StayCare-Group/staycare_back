@@ -552,7 +552,8 @@ INSERT INTO `staycare`.`users` (`id`, `name`, `email`, `password_hash`, `role_id
 (1, 'System Admin', 'admin@staycare.com', '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', 1),
 (2, 'Plant Staff', 'staff@staycare.com', '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', 2),
 (3, 'Main Driver', 'driver@staycare.com', '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', 3),
-(4, 'Test Client', 'client@staycare.com', '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', 4)
+(4, 'Test Client', 'client@staycare.com', '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', 4),
+(5, 'Main Operator', 'operator@staycare.com', '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', 5)
 ON DUPLICATE KEY UPDATE email=email;
 
 
