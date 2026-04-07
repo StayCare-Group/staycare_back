@@ -317,6 +317,21 @@ export const updateOrder = async (req: Request, res: Response) => {
  *               note:
  *                 type: string
  *                 description: Nota genérica registrada en el historial de estado
+ *               staff_confirmed_bags:
+ *                 type: integer
+ *                 description: Conteo de bolsas confirmado por el staff en planta (para estado arrived)
+ *               items:
+ *                 type: array
+ *                 description: Inventario real contado por staff (para estado arrived, dispara recalculo de subtotal e IVA)
+ *                 items:
+ *                   type: object
+ *                   required: [item_id, quantity]
+ *                   properties:
+ *                     item_id: { type: integer }
+ *                     quantity: { type: integer }
+ *                     qty_good: { type: integer }
+ *                     qty_bad: { type: integer }
+ *                     qty_stained: { type: integer }
  *     responses:
  *       200:
  *         description: Estado actualizado correctamente

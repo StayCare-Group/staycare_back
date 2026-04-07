@@ -77,6 +77,8 @@ export const advanceStatusSchema = z.object({
     notes: z.string().optional(),
     // Staff — recepción en facility
     internal_notes: z.string().optional(),
+    staff_confirmed_bags: z.number().int().positive().optional(),
+    items: z.array(orderItemSchema).optional(),
     // Historia genérica
     note: z.string().optional(),
   }),

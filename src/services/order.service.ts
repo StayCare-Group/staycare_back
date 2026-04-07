@@ -45,6 +45,47 @@ export class OrderService {
     return `ORD-${y}${m}${d}-${rand}`;
   }
 
+  private static async calculateTotals(
+    items: { item_id: number; quantity: number }[],
+    serviceType: "standard" | "express"
+  ) {
+    let subtotal = 0;
+    const vatPercentage = 18;
+    const calculatedItems = [];
+
+    for (const item of items) {
+      const itemDef = await ItemRepository.findById(item.item_id);
+      if (!itemDef) {
+        throw new Error(`Item with ID ${item.item_id} not found.`);
+      }
+      const unitPrice = itemDef.base_price;
+      const totalPrice = unitPrice * item.quantity;
+      subtotal += totalPrice;
+
+      calculatedItems.push({
+        item_id: item.item_id,
+        item_code: itemDef.item_code,
+        name: itemDef.name,
+        quantity: item.quantity,
+        unit_price: unitPrice,
+        total_price: totalPrice,
+      });
+    }
+
+    const vatAmount = parseFloat((subtotal * (vatPercentage / 100)).toFixed(2));
+    const surcharge = serviceType === "express" ? EXPRESS_SURCHARGE : 0;
+    const total = parseFloat((subtotal + vatAmount + surcharge).toFixed(2));
+
+    return {
+      subtotal,
+      vatPercentage,
+      vatAmount,
+      surcharge,
+      total,
+      calculatedItems,
+    };
+  }
+
   static async getAllOrders(filter: any, limit: number, offset: number) {
     const [orders, total] = await Promise.all([
       OrderRepository.findManyFiltered(filter, limit, offset),
@@ -82,35 +123,13 @@ export class OrderService {
 
       const orderNumber = this.generateOrderNumber();
       
-      // Calculate pricing based on items
-      let subtotal = 0;
-      const vatPercentage = 18;
-      const calculatedItems: any[] = [];
-
-      if (data.items && Array.isArray(data.items)) {
-        for (const item of data.items) {
-          const itemDef = await ItemRepository.findById(item.item_id);
-          if (!itemDef) {
-            throw new Error(`Item with ID ${item.item_id} not found.`);
-          }
-          const unitPrice = itemDef.base_price;
-          const totalPrice = unitPrice * item.quantity;
-          subtotal += totalPrice;
-          
-          calculatedItems.push({
-            item_id: item.item_id,
-            item_code: itemDef.item_code,
-            name: itemDef.name,
-            quantity: item.quantity,
-            unit_price: unitPrice,
-            total_price: totalPrice
-          });
-        }
-      }
-
-      const vatAmount = parseFloat((subtotal * (vatPercentage / 100)).toFixed(2));
-      const surcharge = (data.service_type === "express") ? EXPRESS_SURCHARGE : 0;
-      const total = parseFloat((subtotal + vatAmount + surcharge).toFixed(2));
+      const {
+        subtotal,
+        vatPercentage,
+        vatAmount,
+        total,
+        calculatedItems
+      } = await this.calculateTotals(data.items || [], data.service_type || "standard");
 
       const orderData: Omit<IOrderMySQL, "id" | "created_at" | "updated_at"> = {
         order_number: orderNumber,
@@ -188,37 +207,28 @@ export class OrderService {
       await OrderRepository.deleteItemsByOrderId(conn, orderId);
 
       // 2. Re-calculate financials based on staff-provided items
-      let subtotal = 0;
-      const vatPercentage = 18;
-      
-      if (data.items && Array.isArray(data.items)) {
-        for (const item of data.items) {
-          const itemDef = await ItemRepository.findById(item.item_id);
-          if (!itemDef) {
-            throw new Error(`Item with ID ${item.item_id} not found during staff reception.`);
-          }
-          const unitPrice = itemDef.base_price;
-          const totalPrice = unitPrice * item.quantity;
-          subtotal += totalPrice;
+      const {
+        subtotal,
+        vatAmount,
+        total,
+        calculatedItems
+      } = await this.calculateTotals(data.items || [], order.service_type);
 
-          await OrderRepository.insertItem(conn, {
-            order_id: orderId,
-            item_id: item.item_id,
-            item_code_snapshot: itemDef.item_code,
-            name_snapshot: itemDef.name,
-            quantity: item.quantity,
-            unit_price: unitPrice,
-            total_price: totalPrice,
-            qty_good: item.qty_good || 0,
-            qty_bad: item.qty_bad || 0,
-            qty_stained: item.qty_stained || 0,
-          });
-        }
+      for (const item of calculatedItems) {
+        const sourceItem = data.items.find(i => i.item_id === item.item_id);
+        await OrderRepository.insertItem(conn, {
+          order_id: orderId,
+          item_id: item.item_id,
+          item_code_snapshot: item.item_code,
+          name_snapshot: item.name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: item.total_price,
+          qty_good: sourceItem?.qty_good || 0,
+          qty_bad: sourceItem?.qty_bad || 0,
+          qty_stained: sourceItem?.qty_stained || 0,
+        });
       }
-
-      const vatAmount = parseFloat((subtotal * (vatPercentage / 100)).toFixed(2));
-      const surcharge = (order.service_type === "express") ? EXPRESS_SURCHARGE : 0;
-      const total = parseFloat((subtotal + vatAmount + surcharge).toFixed(2));
 
       // 3. Update order status, confirmed bags, and financials
       await OrderRepository.update(orderId, {
@@ -344,6 +354,15 @@ export class OrderService {
     if (role !== "staff" && role !== "admin") {
       throw new Error("Only staff can receive orders at facility");
     }
+
+    // Si el staff envía items, usamos la lógica de recepción completa que recalcula todo
+    if (data.items && Array.isArray(data.items)) {
+      return this.receiveInPlant(orderId, userId, {
+        staff_confirmed_bags: data.staff_confirmed_bags || data.actual_bags || 1,
+        items: data.items,
+      });
+    }
+
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -363,7 +382,7 @@ export class OrderService {
         changed_by_user_id: userId,
         is_system: false,
         status: OrderStatus.ARRIVED,
-        note: "Received at facility",
+        note: "Received at facility (Status update only)",
       });
 
       await conn.commit();
@@ -603,9 +622,11 @@ export class OrderService {
     payload: {
       actual_bags?: number;
       photos?: { url: string }[];
-      notes?: string;
       internal_notes?: string;
+      staff_confirmed_bags?: number;
+      items?: any[];
       note?: string;
+      notes?: string;
     },
     userId: number,
     role: string
