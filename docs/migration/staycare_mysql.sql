@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS `staycare`.`invitations` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `token` VARCHAR(100) NOT NULL COMMENT 'UUID hex de 64 chars',
   `email` VARCHAR(150) NOT NULL,
-  `role` ENUM('admin', 'staff', 'driver') NOT NULL COMMENT 'Nunca client — ese rol se crea via /auth/register',
+  `role` ENUM('admin', 'staff', 'driver', 'operator', 'client') NOT NULL COMMENT 'Invitaciones permitidas para todos los roles',
   `created_by` INT UNSIGNED NOT NULL COMMENT 'Admin que generó la invitación',
   `used` TINYINT(1) NOT NULL DEFAULT '0',
   `used_at` DATETIME NULL DEFAULT NULL,
