@@ -3,6 +3,7 @@ import { InvoiceRepository } from "../repositories/invoice.repository";
 import { OrderRepository } from "../repositories/order.repository";
 import { ClientProfileRepository } from "../repositories/clientProfile.repository";
 import { OrderStatus } from "../types/orderStatus";
+import { AppError } from "../utils/AppError";
 
 const generateInvoiceNumber = (): string => {
   const date = new Date();
@@ -35,15 +36,38 @@ export class InvoiceService {
       const invoiceNumber = generateInvoiceNumber();
       const issueDate = new Date().toISOString().slice(0, 10);
 
+      let calculatedSubtotal = 0;
+      let calculatedVatAmount = 0;
+      let calculatedTotal = 0;
+
+      // Validate orders and accumulate totals
+      for (const orderId of data.order_ids) {
+        const order = await OrderRepository.findById(orderId);
+        if (!order) throw new AppError(`La orden #${orderId} no existe.`, 404);
+
+        const items = await OrderRepository.findItemsByOrderId(orderId);
+        if (!items || items.length === 0) {
+          throw new AppError(`La orden #${order.order_number} no tiene ítems confirmados y no puede ser facturada.`, 400);
+        }
+
+        if (order.is_invoiced) {
+          throw new AppError(`La orden #${order.order_number} ya ha sido facturada previamente.`, 400);
+        }
+
+        calculatedSubtotal += Number(order.subtotal);
+        calculatedVatAmount += Number(order.vat_amount);
+        calculatedTotal += Number(order.total);
+      }
+
       const invoiceId = await InvoiceRepository.insert(conn, {
         invoice_number: invoiceNumber,
         client_id: data.client_id,
         issue_date: issueDate,
         due_date: data.due_date,
-        subtotal: data.subtotal,
-        vat_percentage: data.vat_percentage,
-        vat_amount: data.vat_amount,
-        total: data.total,
+        subtotal: calculatedSubtotal,
+        vat_percentage: data.vat_percentage || 18,
+        vat_amount: calculatedVatAmount,
+        total: calculatedTotal,
         status: "pending",
       });
 

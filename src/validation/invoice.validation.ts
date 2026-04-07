@@ -15,10 +15,10 @@ export const createInvoiceSchema = z.object({
         }),
       )
       .min(1),
-    subtotal: z.coerce.number().nonnegative(),
+    subtotal: z.coerce.number().nonnegative().optional(),
     vat_percentage: z.coerce.number().nonnegative().default(18),
-    vat_amount: z.coerce.number().nonnegative(),
-    total: z.coerce.number().nonnegative(),
+    vat_amount: z.coerce.number().nonnegative().optional(),
+    total: z.coerce.number().nonnegative().optional(),
   }),
 });
 
