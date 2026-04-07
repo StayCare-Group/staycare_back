@@ -1,20 +1,18 @@
 import { z } from "zod";
 
+export const lineItemSchema = z.object({
+  description: z.string().min(1),
+  quantity: z.coerce.number().int().positive(),
+  unit_price: z.coerce.number().nonnegative(),
+  total_price: z.coerce.number().nonnegative(),
+});
+
 export const createInvoiceSchema = z.object({
   body: z.object({
     client: z.coerce.number().int().positive(),
     orders: z.array(z.coerce.number().int().positive()).min(1),
     due_date: z.string().min(1, "due_date is required"),
-    line_items: z
-      .array(
-        z.object({
-          description: z.string().min(1),
-          quantity: z.coerce.number().int().positive(),
-          unit_price: z.coerce.number().positive(),
-          total_price: z.coerce.number().positive(),
-        }),
-      )
-      .min(1),
+    line_items: z.array(lineItemSchema).optional(),
     subtotal: z.coerce.number().nonnegative().optional(),
     vat_percentage: z.coerce.number().nonnegative().default(18),
     vat_amount: z.coerce.number().nonnegative().optional(),
@@ -31,5 +29,6 @@ export const recordPaymentSchema = z.object({
   params: z.object({ id: z.string() }),
 });
 
+export type LineItemInput = z.infer<typeof lineItemSchema>;
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>["body"];
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>["body"];

@@ -202,10 +202,23 @@ export class OrderService {
       await conn.beginTransaction();
 
       const order = await OrderRepository.findById(orderId);
-      if (!order) throw new Error("Order not found");
+      if (!order) throw new AppError("Order not found", 404);
+
+      // Block if BOTH invoiced AND completed
+      if (order.is_invoiced && order.status === OrderStatus.COMPLETED) {
+        throw new AppError("No se puede recibir o modificar una orden que ya está facturada y completada satisfactoriamente.", 403);
+      }
 
       // 1. Clear existing items
       await OrderRepository.deleteItemsByOrderId(conn, orderId);
+
+      // Validate item quantity consistency
+      for (const item of data.items) {
+        const sum = (item.qty_good || 0) + (item.qty_bad || 0) + (item.qty_stained || 0);
+        if (sum !== item.quantity) {
+          throw new AppError(`Error en el ítem (ID: ${item.item_id}): La suma de estados (${sum}) no coincide con la cantidad total (${item.quantity}).`, 400);
+        }
+      }
 
       // 2. Re-calculate financials based on staff-provided items
       const {
@@ -260,11 +273,90 @@ export class OrderService {
   }
 
   static async updateOrder(id: number, data: any, userId: number) {
-    await OrderRepository.update(id, data);
-    return await this.getOrderById(id);
+    const order = await OrderRepository.findById(id);
+    if (!order) throw new AppError("Order not found", 404);
+
+    // Block if BOTH invoiced AND completed
+    if (order.is_invoiced && order.status === OrderStatus.COMPLETED) {
+      throw new AppError("No se puede modificar una orden que ya está facturada y completada satisfactoriamente.", 403);
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const { items, pickup_window, ...rest } = data;
+      const updateData: any = { ...rest };
+
+      if (data.pickup_date) {
+        updateData.pickup_date = new Date(data.pickup_date);
+      }
+
+      if (pickup_window) {
+        updateData.pickup_window_start = new Date(pickup_window.start_time);
+        updateData.pickup_window_end = new Date(pickup_window.end_time);
+      }
+
+      if (items && Array.isArray(items)) {
+        // Validate item quantity consistency
+        for (const item of items) {
+          const sum = (item.qty_good || 0) + (item.qty_bad || 0) + (item.qty_stained || 0);
+          if (sum !== item.quantity) {
+            throw new AppError(`Error en el ítem (ID: ${item.item_id}): La suma de estados (${sum}) no coincide con la cantidad total (${item.quantity}).`, 400);
+          }
+        }
+
+        await OrderRepository.deleteItemsByOrderId(conn, id);
+
+        const {
+          subtotal,
+          vatAmount,
+          total,
+          calculatedItems
+        } = await this.calculateTotals(items, data.service_type || order.service_type);
+
+        for (const item of calculatedItems) {
+          const sourceItem = items.find((i: any) => i.item_id === item.item_id);
+          await OrderRepository.insertItem(conn, {
+            order_id: id,
+            item_id: item.item_id,
+            item_code_snapshot: item.item_code,
+            name_snapshot: item.name,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            total_price: item.total_price,
+            qty_good: sourceItem?.qty_good || 0,
+            qty_bad: sourceItem?.qty_bad || 0,
+            qty_stained: sourceItem?.qty_stained || 0,
+          });
+        }
+
+        updateData.subtotal = subtotal;
+        updateData.vat_amount = vatAmount;
+        updateData.total = total;
+      }
+
+      await OrderRepository.update(id, updateData, conn);
+
+      await conn.commit();
+      return await this.getOrderById(id);
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
   }
 
   static async updateStatus(orderId: number, status: OrderStatus, userId: number, role: string, note?: string) {
+    const order = await OrderRepository.findById(orderId);
+    if (!order) throw new AppError("Order not found", 404);
+
+    // Block if BOTH invoiced AND completed
+    if (order.is_invoiced && order.status === OrderStatus.COMPLETED) {
+      throw new AppError("No se puede cambiar el estado de una orden que ya está facturada y completada satisfactoriamente.", 403);
+    }
+
     const STAFF_ONLY_STATUSES = new Set([
       OrderStatus.WASHING,
       OrderStatus.DRYING,
