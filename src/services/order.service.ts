@@ -365,8 +365,8 @@ export class OrderService {
       OrderStatus.READY_TO_DELIVERY,
     ]);
 
-    if (STAFF_ONLY_STATUSES.has(status) && role !== "staff" && role !== "admin") {
-      throw new Error(`Only staff can set order status to ${status}`);
+    if (STAFF_ONLY_STATUSES.has(status) && role !== "staff" && role !== "admin" && role !== "operator") {
+      throw new Error(`Only staff or operator can set order status to ${status}`);
     }
 
     const conn = await pool.getConnection();
@@ -444,8 +444,8 @@ export class OrderService {
   }
 
   static async receiveAtFacility(orderId: number, data: any, userId: number, role: string) {
-    if (role !== "staff" && role !== "admin") {
-      throw new Error("Only staff can receive orders at facility");
+    if (role !== "staff" && role !== "admin" && role !== "operator") {
+      throw new Error("Only staff or operator can receive orders at facility");
     }
 
     // Si el staff envía items, usamos la lógica de recepción completa que recalcula todo
