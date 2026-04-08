@@ -298,14 +298,6 @@ export class OrderService {
       }
 
       if (items && Array.isArray(items)) {
-        // Validate item quantity consistency
-        for (const item of items) {
-          const sum = (item.qty_good || 0) + (item.qty_bad || 0) + (item.qty_stained || 0);
-          if (sum !== item.quantity) {
-            throw new AppError(`Error en el ítem (ID: ${item.item_id}): La suma de estados (${sum}) no coincide con la cantidad total (${item.quantity}).`, 400);
-          }
-        }
-
         await OrderRepository.deleteItemsByOrderId(conn, id);
 
         const {
