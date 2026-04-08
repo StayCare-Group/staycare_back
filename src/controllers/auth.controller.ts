@@ -7,7 +7,11 @@ import { setAuthCookies, clearAuthCookies } from "../utils/auth.helper";
 import { sendSuccess, sendError } from "../utils/response";
 import { AppError } from "../utils/AppError";
 import { duplicateEntryMessage } from "../utils/mysqlErrors";
-import { getAccessTokenCookieOptions, verifyRefreshToken } from "../utils/jwt";
+import {
+  getAccessTokenCookieOptions,
+  verifyAccessToken,
+  verifyRefreshToken,
+} from "../utils/jwt";
 
 /**
  * @swagger
@@ -45,7 +49,23 @@ import { getAccessTokenCookieOptions, verifyRefreshToken } from "../utils/jwt";
  */
 export const register = async (req: Request, res: Response) => {
   try {
-    const { user, tokens } = await AuthService.register(req.body);
+    let issueSession = true;
+
+    if ((req.body?.role ?? "client") === "client") {
+      const accessToken = req.cookies?.accessToken as string | undefined;
+      if (accessToken) {
+        try {
+          const actor = verifyAccessToken(accessToken);
+          if (actor.role === "admin") {
+            issueSession = false;
+          }
+        } catch {
+          issueSession = true;
+        }
+      }
+    }
+
+    const { user, tokens } = await AuthService.register(req.body, { issueSession });
     if (tokens) setAuthCookies(res, tokens);
 
     const baseUser = {

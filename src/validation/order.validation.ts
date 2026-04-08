@@ -9,6 +9,10 @@ const orderItemSchema = z.object({
   name: z.string().optional(),
   unit_price: z.number().optional(),
   total_price: z.number().optional(),
+  // Condition breakdown — used by receiveInPlant; passed through if present
+  qty_good: z.number().int().min(0).optional(),
+  qty_bad: z.number().int().min(0).optional(),
+  qty_stained: z.number().int().min(0).optional(),
 });
 
 export const createOrderSchema = z.object({

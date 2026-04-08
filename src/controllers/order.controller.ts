@@ -262,7 +262,7 @@ export const updateOrder = async (req: Request, res: Response) => {
     const order = await OrderService.updateOrder(Number(req.params.id), req.body, userId);
     return sendSuccess(res, 200, "Order updated", order);
   } catch (error: any) {
-    return sendError(res, 400, "Order update failed");
+    return sendError(res, error.statusCode ?? 400, error.message || "Order update failed");
   }
 };
 
