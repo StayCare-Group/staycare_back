@@ -109,6 +109,30 @@ export class InvoiceService {
     }
   }
 
+  static async createAutomaticInvoice(orderId: EntityId, userId: EntityId) {
+    const order = await OrderRepository.findById(orderId);
+    if (!order) return null;
+    if (order.is_invoiced) return null;
+
+    // Get client credit terms
+    const profile = await ClientProfileRepository.findByUserId(order.client_id);
+    const terms = profile?.credits_terms_days ?? 30;
+
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + terms);
+    const dueDateStr = dueDate.toISOString().slice(0, 10);
+
+    return await this.createInvoice({
+      client_id: order.client_id,
+      order_ids: [orderId],
+      due_date: dueDateStr,
+      subtotal: Number(order.subtotal),
+      vat_percentage: Number(order.vat_percentage),
+      vat_amount: Number(order.vat_amount),
+      total: Number(order.total),
+    }, userId);
+  }
+
   static async getAllInvoices(
     filter: { status?: string; client_id?: EntityId | undefined; from?: string; to?: string; search?: string | undefined },
     limit: number,

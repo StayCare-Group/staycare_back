@@ -6,6 +6,7 @@ import { OrderStatus } from "../types/orderStatus";
 import { sendOrderStatusEmail } from "../utils/mail";
 import { PoolConnection } from "mysql2/promise";
 import { AppError } from "../utils/AppError";
+import { InvoiceService } from "./invoice.service";
 
 const EXPRESS_SURCHARGE = 25.0;
 
@@ -377,6 +378,14 @@ export class OrderService {
       await conn.commit();
       const result = await this.getOrderById(orderId);
       this.notifyClientOfStatus(orderId, status);
+
+      // Automatic Invoicing if status is COMPLETED
+      if (status === OrderStatus.COMPLETED) {
+        InvoiceService.createAutomaticInvoice(orderId, userId).catch(err => {
+          console.error(`Error generating automatic invoice for order ${orderId}:`, err);
+        });
+      }
+
       return result;
     } catch (error) {
       await conn.rollback();
@@ -564,6 +573,12 @@ export class OrderService {
       await conn.commit();
       const result = await this.getOrderById(orderId);
       this.notifyClientOfStatus(orderId, OrderStatus.DELIVERED);
+
+      // Automatic Invoicing
+      InvoiceService.createAutomaticInvoice(orderId, userId).catch(err => {
+        console.error(`Error generating automatic invoice for order ${orderId}:`, err);
+      });
+
       return result;
     } catch (error) {
       await conn.rollback();
