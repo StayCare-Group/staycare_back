@@ -18,7 +18,7 @@ import type { RegisterRequestBody } from "../validation/user.validation";
 const SALT_ROUNDS = 10;
 
 const toTokenRole = (role: string): UserRole =>
-  (["admin", "client", "driver", "staff"].includes(role)
+  (["admin", "client", "driver", "staff", "operator"].includes(role)
     ? (role as UserRole)
     : "client");
 
