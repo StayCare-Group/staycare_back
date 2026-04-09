@@ -14,6 +14,7 @@ import {
   type PropertyCreateRow,
 } from "./userRegistration.service";
 import type { RegisterRequestBody } from "../validation/user.validation";
+import type { EntityId } from "../utils/id";
 
 const SALT_ROUNDS = 10;
 
@@ -92,7 +93,7 @@ export class AuthService {
   }
 
   static async updateMe(
-    userId: number,
+    userId: EntityId,
     data: Partial<IUserMySQL> & { contact_person?: string; billing_address?: string }
   ): Promise<IUserMySQL> {
     await UserRepository.update(userId, data);
@@ -113,7 +114,7 @@ export class AuthService {
     return user;
   }
 
-  static async changePassword(userId: number, current: string, next: string): Promise<void> {
+  static async changePassword(userId: EntityId, current: string, next: string): Promise<void> {
     const user = await UserRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
 
@@ -124,7 +125,7 @@ export class AuthService {
     await UserRepository.update(userId, { password_hash });
   }
 
-  static async logout(userId: number): Promise<void> {
+  static async logout(userId: EntityId): Promise<void> {
     await UserRepository.updateRefreshToken(userId, null);
   }
 

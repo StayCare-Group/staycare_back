@@ -1,6 +1,7 @@
 import pool from "../db/pool";
 import { MachineRepository, MachineType, MachineStatus } from "../repositories/machine.repository";
 import { OrderRepository } from "../repositories/order.repository";
+import type { EntityId } from "../utils/id";
 
 export class MachineService {
   static async getAllMachines(
@@ -26,7 +27,7 @@ export class MachineService {
   }
 
   static async updateMachine(
-    id: number,
+    id: EntityId,
     data: Partial<{ name: string; type: MachineType; capacity: number; status: "available" | "running" | "maintenance" }>
   ) {
     const machine = await MachineRepository.findById(id);
@@ -36,7 +37,7 @@ export class MachineService {
     return MachineRepository.findById(id);
   }
 
-  static async deleteMachine(id: number) {
+  static async deleteMachine(id: EntityId) {
     const machine = await MachineRepository.findById(id);
     if (!machine) throw Object.assign(new Error("Machine not found"), { status: 404 });
     if (machine.status === "running") {
@@ -45,7 +46,7 @@ export class MachineService {
     await MachineRepository.delete(id);
   }
 
-  static async assignMachine(id: number, orderId: number) {
+  static async assignMachine(id: EntityId, orderId: EntityId) {
     const machine = await MachineRepository.findById(id);
     if (!machine) throw Object.assign(new Error("Machine not found"), { status: 404 });
     if (machine.status === "running") {
@@ -63,7 +64,7 @@ export class MachineService {
     return MachineRepository.findById(id);
   }
 
-  static async releaseMachine(id: number) {
+  static async releaseMachine(id: EntityId) {
     const machine = await MachineRepository.findById(id);
     if (!machine) throw Object.assign(new Error("Machine not found"), { status: 404 });
 

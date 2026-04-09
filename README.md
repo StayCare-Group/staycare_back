@@ -69,7 +69,9 @@ The fastest way to run the entire stack (Backend + MySQL) is using Docker Compos
     ```
 2.  **Prepare Database**:
     -   Create a database named `staycare`.
-    -   Run the initialization script: `docs/migration/staycare_mysql.sql`.
+    -   Run the initialization script: `docs/migration/staycare_mysql.sql`
+        -   All primary and foreign keys use UUID (`CHAR(36)`)
+        -   Seed users and roles included
 3.  **Configure `.env`**:
     ```bash
     cp .env.example .env

@@ -75,7 +75,7 @@ import { parsePagination, paginationMeta } from "../utils/paginate";
 export const createInvitation = async (req: Request, res: Response) => {
   try {
     const { email, role } = req.body;
-    const createdByUserId = Number(req.user!.userId);
+    const createdByUserId = req.user!.userId;
 
     const result = await InvitationService.createInvitation(email, role, createdByUserId);
 

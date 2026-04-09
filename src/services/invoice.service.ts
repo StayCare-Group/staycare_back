@@ -5,6 +5,7 @@ import { ClientProfileRepository } from "../repositories/clientProfile.repositor
 import { OrderStatus } from "../types/orderStatus";
 import { AppError } from "../utils/AppError";
 import { LineItemInput } from "../validation/invoice.validation";
+import type { EntityId } from "../utils/id";
 
 const generateInvoiceNumber = (): string => {
   const date = new Date();
@@ -16,15 +17,15 @@ const generateInvoiceNumber = (): string => {
 
 export class InvoiceService {
   static async createInvoice(data: {
-    client_id: number;
-    order_ids: number[];
+    client_id: EntityId;
+    order_ids: EntityId[];
     due_date: string;
     line_items?: LineItemInput[];
     subtotal: number;
     vat_percentage: number;
     vat_amount: number;
     total: number;
-  }, userId: number) {
+  }, userId: EntityId) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -109,7 +110,7 @@ export class InvoiceService {
   }
 
   static async getAllInvoices(
-    filter: { status?: string; client_id?: number | string; from?: string; to?: string; search?: string | undefined },
+    filter: { status?: string; client_id?: EntityId | undefined; from?: string; to?: string; search?: string | undefined },
     limit: number,
     offset: number
   ) {
@@ -121,7 +122,7 @@ export class InvoiceService {
     return { invoices, total };
   }
 
-  static async getInvoiceById(id: number | string) {
+  static async getInvoiceById(id: EntityId) {
     const invoice = await InvoiceRepository.findById(id);
     if (!invoice) return null;
     return invoice;
@@ -132,13 +133,13 @@ export class InvoiceService {
    */
 
   static async recordPayment(
-    invoiceId: number,
+    invoiceId: EntityId,
     payment: {
       amount: number;
       method: "cash" | "bank_transfer" | "card";
       transaction_reference: string;
     },
-    userId: number
+    userId: EntityId
   ) {
     const invoice = await InvoiceRepository.findById(invoiceId);
     if (!invoice) {

@@ -74,7 +74,7 @@ import { AppError } from "../utils/AppError";
  */
 export const createOrder = async (req: Request, res: Response) => {
   try {
-    const userId = Number(req.user!.userId);
+    const userId = req.user!.userId;
     const order = await OrderService.createOrder(req.body, userId, req.user!.role);
     return sendSuccess(res, 201, "Order created", order);
   } catch (error: any) {
@@ -148,7 +148,7 @@ export const getAllOrders = async (req: Request, res: Response) => {
 
     // 2. Driver: Ver todas sus órdenes activas (no entregadas/finalizadas)
     if (req.user!.role === "driver") {
-      filter.driver_id = Number(req.user!.userId);
+      filter.driver_id = req.user!.userId;
 
       // Si el driver no especifica un estado puntual, le mostramos todo lo "abierto"
       if (!status) {
@@ -215,8 +215,7 @@ export const getAllOrders = async (req: Request, res: Response) => {
  */
 export const getOrderById = async (req: Request, res: Response) => {
   try {
-    const orderId = Number(req.params.id);
-    if (isNaN(orderId)) return sendError(res, 400, "Invalid order ID");
+    const orderId = req.params.id;
     const order = await OrderService.getOrderById(orderId);
     return sendSuccess(res, 200, "Order retrieved", order);
   } catch (error: any) {
@@ -258,8 +257,8 @@ export const getOrderById = async (req: Request, res: Response) => {
  */
 export const updateOrder = async (req: Request, res: Response) => {
   try {
-    const userId = Number(req.user!.userId);
-    const order = await OrderService.updateOrder(Number(req.params.id), req.body, userId);
+    const userId = req.user!.userId;
+    const order = await OrderService.updateOrder(req.params.id, req.body, userId);
     return sendSuccess(res, 200, "Order updated", order);
   } catch (error: any) {
     return sendError(res, error.statusCode ?? 400, error.message || "Order update failed");
@@ -348,11 +347,10 @@ export const updateOrder = async (req: Request, res: Response) => {
  */
 export const advanceOrderStatus = async (req: Request, res: Response) => {
   try {
-    const orderId = Number(req.params.id);
-    if (isNaN(orderId)) return sendError(res, 400, "Invalid order ID");
+    const orderId = req.params.id;
 
     const { status, ...payload } = req.body;
-    const userId = Number(req.user!.userId);
+    const userId = req.user!.userId;
 
     const order = await OrderService.advanceStatus(orderId, status, payload, userId, req.user!.role);
     return sendSuccess(res, 200, "Order status updated", order);
@@ -386,7 +384,7 @@ export const advanceOrderStatus = async (req: Request, res: Response) => {
  */
 export const deleteOrder = async (req: Request, res: Response) => {
   try {
-    await OrderService.deleteOrder(Number(req.params.id));
+    await OrderService.deleteOrder(req.params.id);
     return sendSuccess(res, 200, "Order deleted");
   } catch (error: any) {
     return sendError(res, 400, "Order deletion failed");
@@ -436,8 +434,8 @@ export const deleteOrder = async (req: Request, res: Response) => {
  */
 export const rescheduleOrder = async (req: Request, res: Response) => {
   try {
-    const userId = Number(req.user!.userId);
-    const order = await OrderService.rescheduleOrder(Number(req.params.id), req.body, userId);
+    const userId = req.user!.userId;
+    const order = await OrderService.rescheduleOrder(req.params.id, req.body, userId);
     return sendSuccess(res, 200, "Order rescheduled", order);
   } catch (error: any) {
     return sendError(res, 400, "Reschedule failed");
@@ -484,10 +482,10 @@ export const rescheduleOrder = async (req: Request, res: Response) => {
 export const reassignOrder = async (req: Request, res: Response) => {
   try {
     const { driver_id } = req.body;
-    const userId = Number(req.user!.userId);
+    const userId = req.user!.userId;
     const order = await OrderService.reassignOrder(
-      Number(req.params.id),
-      Number(driver_id),
+      req.params.id,
+      String(driver_id),
       userId,
       req.user!.role
     );
@@ -544,8 +542,8 @@ export const reassignOrder = async (req: Request, res: Response) => {
  */
 export const receiveOrder = async (req: Request, res: Response) => {
   try {
-    const userId = Number(req.user!.userId);
-    const orderId = Number(req.params.id);
+    const userId = req.user!.userId;
+    const orderId = req.params.id;
     const order = await OrderService.receiveInPlant(orderId, userId, req.body);
     return sendSuccess(res, 200, "Order received in plant and inventory recorded", order);
   } catch (error: any) {
@@ -594,10 +592,9 @@ export const receiveOrder = async (req: Request, res: Response) => {
  */
 export const confirmDelivery = async (req: Request, res: Response) => {
   try {
-    const orderId = Number(req.params.id);
-    if (isNaN(orderId)) return sendError(res, 400, "Invalid order ID");
+    const orderId = req.params.id;
 
-    const userId = Number(req.user!.userId);
+    const userId = req.user!.userId;
     const order = await OrderService.confirmDriverAction(orderId, userId, req.user!.role, req.body);
 
     return sendSuccess(res, 200, "Driver action confirmed", order);

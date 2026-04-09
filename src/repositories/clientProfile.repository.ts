@@ -1,12 +1,13 @@
 import type { PoolConnection } from "mysql2/promise";
-import type { RowDataPacket, ResultSetHeader } from "mysql2";
+import type { RowDataPacket } from "mysql2";
 import pool from "../db/pool";
+import { generateEntityId, type EntityId } from "../utils/id";
 
 export type PricingTier = "standard" | "premium" | "enterprise";
 
 export interface IClientProfileRow {
-  id?: number;
-  user_id: number;
+  id?: EntityId;
+  user_id: EntityId;
   contact_person: string;
   vat_number: string;
   billing_address: string;
@@ -17,8 +18,8 @@ export interface IClientProfileRow {
 }
 
 export type ClientListRow = {
-  client_profile_id: number;
-  user_id: number;
+  client_profile_id: EntityId;
+  user_id: EntityId;
   contact_person: string;
   vat_number: string;
   billing_address: string;
@@ -35,7 +36,7 @@ export type ClientListRow = {
 
 export class ClientProfileRepository {
 
-  static async findByUserId(userId: number): Promise<IClientProfileRow | null> {
+  static async findByUserId(userId: EntityId): Promise<IClientProfileRow | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT id, user_id, contact_person, vat_number, billing_address,
               credits_terms_days, pricing_tier, created_at, updated_at
@@ -45,7 +46,7 @@ export class ClientProfileRepository {
     return (rows[0] as IClientProfileRow) || null;
   }
 
-  static async findById(id: number): Promise<IClientProfileRow | null> {
+  static async findById(id: EntityId): Promise<IClientProfileRow | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT id, user_id, contact_person, vat_number, billing_address,
               credits_terms_days, pricing_tier, created_at, updated_at
@@ -55,12 +56,12 @@ export class ClientProfileRepository {
     return (rows[0] as IClientProfileRow) || null;
   }
 
-  static async findUserIdByProfileId(clientProfileId: number): Promise<number | null> {
+  static async findUserIdByProfileId(clientProfileId: EntityId): Promise<EntityId | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       "SELECT user_id FROM client_profiles WHERE id = ? LIMIT 1",
       [clientProfileId]
     );
-    const uid = (rows[0] as { user_id: number } | undefined)?.user_id;
+    const uid = (rows[0] as { user_id: EntityId } | undefined)?.user_id;
     return uid ?? null;
   }
 
@@ -118,7 +119,7 @@ export class ClientProfileRepository {
   }
 
   static async update(
-    clientProfileId: number,
+    clientProfileId: EntityId,
     data: Partial<
       Pick<IClientProfileRow, "contact_person" | "vat_number" | "billing_address" | "credits_terms_days" | "pricing_tier">
     >
@@ -143,19 +144,21 @@ export class ClientProfileRepository {
   static async insert(
     conn: PoolConnection,
     row: {
-      user_id: number;
+      user_id: EntityId;
       contact_person: string;
       vat_number: string;
       billing_address: string;
       credits_terms_days?: number;
       pricing_tier?: PricingTier;
     }
-  ): Promise<number> {
-    const [result] = await conn.execute<ResultSetHeader>(
+  ): Promise<EntityId> {
+    const id = generateEntityId();
+    await conn.execute(
       `INSERT INTO client_profiles
-        (user_id, contact_person, vat_number, billing_address, credits_terms_days, pricing_tier)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+        (id, user_id, contact_person, vat_number, billing_address, credits_terms_days, pricing_tier)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
+        id,
         row.user_id,
         row.contact_person,
         row.vat_number,
@@ -164,6 +167,6 @@ export class ClientProfileRepository {
         row.pricing_tier ?? "standard",
       ]
     );
-    return result.insertId;
+    return id;
   }
 }

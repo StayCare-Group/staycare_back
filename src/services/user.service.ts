@@ -5,6 +5,7 @@ import { PropertyRepository, type IPropertyRow } from "../repositories/property.
 import { AppError } from "../utils/AppError";
 import { duplicateEntryMessage } from "../utils/mysqlErrors";
 import type { IClientProfileRow } from "../repositories/clientProfile.repository";
+import type { EntityId } from "../utils/id";
 
 const SALT_ROUNDS = 10;
 
@@ -51,7 +52,7 @@ export class UserService {
   }
 
 
-  static async getUserDetailByUserId(userId: number): Promise<{
+  static async getUserDetailByUserId(userId: EntityId): Promise<{
     client_profile: IClientProfileRow | null;
     user: IUserMySQL;
   } | null> {
@@ -61,11 +62,11 @@ export class UserService {
     return { client_profile: profile, user };
   }
 
-  static async userOwnsProfile(authUserId: string | number, targetUserId: number): Promise<boolean> {
-    return Number(authUserId) === targetUserId;
+  static async userOwnsProfile(authUserId: EntityId, targetUserId: EntityId): Promise<boolean> {
+    return authUserId === targetUserId;
   }
 
-  static async updateClientProfile(userId: number, body: UpdateClientProfileBody): Promise<void> {
+  static async updateClientProfile(userId: EntityId, body: UpdateClientProfileBody): Promise<void> {
     const user = await UserRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
 
@@ -110,14 +111,14 @@ export class UserService {
     }
   }
 
-  static async deleteUserById(userId: number): Promise<void> {
+  static async deleteUserById(userId: EntityId): Promise<void> {
     const user = await UserRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
     await UserRepository.deleteById(userId);
   }
 
   /** Resuelve `users.id` → (Legacy check, now just ensures role is client). */
-  static async ensureClientRoleOrThrow(userId: number): Promise<void> {
+  static async ensureClientRoleOrThrow(userId: EntityId): Promise<void> {
     const user = await UserRepository.findById(userId);
     if (!user) throw new AppError("User not found", 404);
     if (user.role !== "client") {
@@ -139,7 +140,7 @@ export class UserService {
   }
 
   static async getUserByIdWithClientProfileIfExists(
-    rawId: string | number
+    rawId: EntityId
   ): Promise<{ 
     user: IUserMySQL; 
     client_profile: IClientProfileRow | null; 
@@ -192,9 +193,9 @@ export class UserService {
 
       // Si es un cliente y viene información de perfil, actualizarla
       if (existing.role === "client" && profileToUpdate) {
-        const currentProfile = await ClientProfileRepository.findByUserId(Number(rawId));
+        const currentProfile = await ClientProfileRepository.findByUserId(rawId);
         if (currentProfile?.id) {
-          await ClientProfileRepository.update(Number(currentProfile.id), profileToUpdate);
+          await ClientProfileRepository.update(currentProfile.id, profileToUpdate);
         }
       }
 

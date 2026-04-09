@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidIdSchema } from "./id.validation";
 
 export const lineItemSchema = z.object({
   description: z.string().min(1),
@@ -9,8 +10,8 @@ export const lineItemSchema = z.object({
 
 export const createInvoiceSchema = z.object({
   body: z.object({
-    client: z.coerce.number().int().positive(),
-    orders: z.array(z.coerce.number().int().positive()).min(1),
+    client: uuidIdSchema,
+    orders: z.array(uuidIdSchema).min(1),
     due_date: z.string().min(1, "due_date is required"),
     line_items: z.array(lineItemSchema).optional(),
     subtotal: z.coerce.number().nonnegative().optional(),
@@ -26,7 +27,7 @@ export const recordPaymentSchema = z.object({
     method: z.enum(["cash", "bank_transfer", "card"]),
     transaction_reference: z.string().min(1),
   }),
-  params: z.object({ id: z.string() }),
+  params: z.object({ id: uuidIdSchema }),
 });
 
 export type LineItemInput = z.infer<typeof lineItemSchema>;

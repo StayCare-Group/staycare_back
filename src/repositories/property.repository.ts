@@ -1,10 +1,11 @@
 import type { PoolConnection } from "mysql2/promise";
-import type { RowDataPacket, ResultSetHeader } from "mysql2";
+import type { RowDataPacket } from "mysql2";
 import pool from "../db/pool";
+import { generateEntityId, type EntityId } from "../utils/id";
 
 export interface IPropertyRow {
-  id?: number;
-  user_id: number;
+  id?: EntityId;
+  user_id: EntityId;
   property_name: string;
   address: string;
   city: string;
@@ -17,7 +18,7 @@ export interface IPropertyRow {
 }
 
 export type PropertyInsertInput = {
-  user_id: number;
+  user_id: EntityId;
   property_name: string;
   address: string;
   city: string;
@@ -32,7 +33,7 @@ export class PropertyRepository {
     return conn ?? pool;
   }
 
-  static async listByUserId(userId: number): Promise<IPropertyRow[]> {
+  static async listByUserId(userId: EntityId): Promise<IPropertyRow[]> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT id, user_id, property_name, address, city, area,
               access_notes, lat, lng, created_at, updated_at
@@ -42,7 +43,7 @@ export class PropertyRepository {
     return rows as IPropertyRow[];
   }
 
-  static async findById(id: number): Promise<IPropertyRow | null> {
+  static async findById(id: EntityId): Promise<IPropertyRow | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT id, user_id, property_name, address, city, area,
               access_notes, lat, lng, created_at, updated_at
@@ -53,7 +54,7 @@ export class PropertyRepository {
   }
 
   static async findByLatLng(
-    userId: number,
+    userId: EntityId,
     lat: string | number,
     lng: string | number
   ): Promise<IPropertyRow | null> {
@@ -67,13 +68,15 @@ export class PropertyRepository {
     return (rows[0] as IPropertyRow) || null;
   }
 
-  static async insert(conn: PoolConnection | null, row: PropertyInsertInput): Promise<number> {
+  static async insert(conn: PoolConnection | null, row: PropertyInsertInput): Promise<EntityId> {
     const exec = this.executor(conn);
-    const [result] = await exec.execute<ResultSetHeader>(
+    const id = generateEntityId();
+    await exec.execute(
       `INSERT INTO properties
-        (user_id, property_name, address, city, area, access_notes, lat, lng)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, user_id, property_name, address, city, area, access_notes, lat, lng)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        id,
         row.user_id,
         row.property_name,
         row.address,
@@ -84,11 +87,11 @@ export class PropertyRepository {
         row.lng ?? null,
       ]
     );
-    return result.insertId;
+    return id;
   }
 
   static async update(
-    id: number,
+    id: EntityId,
     data: Partial<
       Pick<IPropertyRow, "property_name" | "address" | "city" | "area" | "access_notes" | "lat" | "lng">
     >
@@ -111,7 +114,7 @@ export class PropertyRepository {
     await pool.execute(`UPDATE properties SET ${setClause} WHERE id = ?`, values);
   }
 
-  static async delete(id: number): Promise<void> {
+  static async delete(id: EntityId): Promise<void> {
     await pool.execute("DELETE FROM properties WHERE id = ?", [id]);
   }
 }

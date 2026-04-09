@@ -10,7 +10,7 @@ import { AppError } from "../utils/AppError";
 const EXPRESS_SURCHARGE = 25.0;
 
 export class OrderService {
-  private static async notifyClientOfStatus(orderId: number, newStatus: OrderStatus): Promise<void> {
+  private static async notifyClientOfStatus(orderId: string, newStatus: OrderStatus): Promise<void> {
     const NOTIFY_STATUSES = new Set([
       OrderStatus.ASSIGNED,
       OrderStatus.TRANSIT,
@@ -46,7 +46,7 @@ export class OrderService {
   }
 
   private static async calculateTotals(
-    items: { item_id: number; quantity: number }[],
+    items: { item_id: string; quantity: number }[],
     serviceType: "standard" | "express"
   ) {
     let subtotal = 0;
@@ -94,7 +94,7 @@ export class OrderService {
     return { orders, total };
   }
 
-  static async getOrderById(id: number | string) {
+  static async getOrderById(id: string) {
     const order = await OrderRepository.findById(id);
     if (!order) return null;
     const items = await OrderRepository.findItemsByOrderId(id);
@@ -102,7 +102,7 @@ export class OrderService {
     return { ...order, items, status_history: history };
   }
 
-  static async createOrder(data: any, userId: number, role: string) {
+  static async createOrder(data: any, userId: string, role: string) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -190,11 +190,11 @@ export class OrderService {
   }
 
   static async receiveInPlant(
-    orderId: number, 
-    userId: number, 
+    orderId: string, 
+    userId: string, 
     data: { 
       staff_confirmed_bags: number; 
-      items: { item_id: number; quantity: number; qty_good: number; qty_bad: number; qty_stained: number }[] 
+      items: { item_id: string; quantity: number; qty_good: number; qty_bad: number; qty_stained: number }[] 
     }
   ) {
     const conn = await pool.getConnection();
@@ -272,7 +272,7 @@ export class OrderService {
     }
   }
 
-  static async updateOrder(id: number, data: any, userId: number) {
+  static async updateOrder(id: string, data: any, userId: string) {
     const order = await OrderRepository.findById(id);
     if (!order) throw new AppError("Order not found", 404);
 
@@ -340,7 +340,7 @@ export class OrderService {
     }
   }
 
-  static async updateStatus(orderId: number, status: OrderStatus, userId: number, role: string, note?: string) {
+  static async updateStatus(orderId: string, status: OrderStatus, userId: string, role: string, note?: string) {
     const order = await OrderRepository.findById(orderId);
     if (!order) throw new AppError("Order not found", 404);
 
@@ -386,7 +386,7 @@ export class OrderService {
     }
   }
 
-  static async confirmPickup(orderId: number, data: any, userId: number, role: string) {
+  static async confirmPickup(orderId: string, data: any, userId: string, role: string) {
     if (role !== "driver" && role !== "admin") {
       throw new Error("Only drivers can confirm pickups");
     }
@@ -435,7 +435,7 @@ export class OrderService {
     }
   }
 
-  static async receiveAtFacility(orderId: number, data: any, userId: number, role: string) {
+  static async receiveAtFacility(orderId: string, data: any, userId: string, role: string) {
     if (role !== "staff" && role !== "admin" && role !== "operator") {
       throw new Error("Only staff or operator can receive orders at facility");
     }
@@ -482,7 +482,7 @@ export class OrderService {
     }
   }
 
-  static async confirmCollection(orderId: number, userId: number, role: string) {
+  static async confirmCollection(orderId: string, userId: string, role: string) {
     if (role !== "driver" && role !== "admin") {
       throw new Error("Only drivers can confirm collection from facility");
     }
@@ -511,7 +511,7 @@ export class OrderService {
     }
   }
 
-  static async confirmDriverAction(orderId: number, userId: number, role: string, data: any) {
+  static async confirmDriverAction(orderId: string, userId: string, role: string, data: any) {
     const order = await OrderRepository.findById(orderId);
     if (!order) throw new AppError("Order not found", 404);
 
@@ -534,7 +534,7 @@ export class OrderService {
     throw new AppError(`Current order status (${order.status}) does not allow driver confirmation action.`, 400);
   }
 
-  static async confirmDelivery(orderId: number, data: any, userId: number, role: string) {
+  static async confirmDelivery(orderId: string, data: any, userId: string, role: string) {
     if (role !== "driver" && role !== "admin") {
       throw new Error("Only drivers can confirm delivery");
     }
@@ -573,7 +573,7 @@ export class OrderService {
     }
   }
 
-  static async rescheduleOrder(orderId: number, data: any, userId: number) {
+  static async rescheduleOrder(orderId: string, data: any, userId: string) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -612,7 +612,7 @@ export class OrderService {
     }
   }
 
-  static async reassignOrder(orderId: number, targetDriverId: number, userId: number, role: string) {
+  static async reassignOrder(orderId: string, targetDriverId: string, userId: string, role: string) {
     if (role !== "admin") {
       throw new Error("Only administrators can reassign orders");
     }
@@ -642,15 +642,16 @@ export class OrderService {
         [targetDriverId, pickupDate]
       );
 
-      let routeId: number;
+      let routeId: string;
       if (routes.length > 0) {
         routeId = routes[0].id;
       } else {
-        const [result]: any = await conn.execute(
-          "INSERT INTO routes (route_date, driver_id, area, status) VALUES (?, ?, ?, 'planned')",
-          [pickupDate, targetDriverId, area]
+        const [generated]: any = await conn.query("SELECT UUID() AS id");
+        routeId = generated[0].id;
+        await conn.execute(
+          "INSERT INTO routes (id, route_date, driver_id, area, status) VALUES (?, ?, ?, ?, 'planned')",
+          [routeId, pickupDate, targetDriverId, area]
         );
-        routeId = result.insertId;
       }
 
       await conn.execute(
@@ -702,7 +703,7 @@ export class OrderService {
    *   completed          → admin, staff
    */
   static async advanceStatus(
-    orderId: number,
+    orderId: string,
     status: OrderStatus,
     payload: {
       actual_bags?: number;
@@ -713,7 +714,7 @@ export class OrderService {
       note?: string;
       notes?: string;
     },
-    userId: number,
+    userId: string,
     role: string
   ) {
     switch (status) {
@@ -736,7 +737,7 @@ export class OrderService {
     }
   }
 
-  static async deleteOrder(id: number) {
+  static async deleteOrder(id: string) {
     await OrderRepository.delete(id);
   }
 }

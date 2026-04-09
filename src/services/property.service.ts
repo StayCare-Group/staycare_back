@@ -3,13 +3,14 @@ import { OrderRepository } from "../repositories/order.repository";
 import { UserRepository } from "../repositories/user.repository";
 import { AppError } from "../utils/AppError";
 import { duplicateEntryMessage } from "../utils/mysqlErrors";
+import type { EntityId } from "../utils/id";
 
 export class PropertyService {
-  static async listByUserId(userId: number): Promise<IPropertyRow[]> {
+  static async listByUserId(userId: EntityId): Promise<IPropertyRow[]> {
     return await PropertyRepository.listByUserId(userId);
   }
 
-  static async getById(id: number, userId?: number): Promise<IPropertyRow> {
+  static async getById(id: EntityId, userId?: EntityId): Promise<IPropertyRow> {
     const prop = await PropertyRepository.findById(id);
     if (!prop) throw new AppError("Property not found", 404);
     
@@ -20,7 +21,7 @@ export class PropertyService {
   }
 
   static async addPropertyForClientUser(
-    userId: number,
+    userId: EntityId,
     input: Omit<PropertyInsertInput, "user_id">
   ): Promise<IPropertyRow | null> {
     // Check for duplicates by lat/lng
@@ -46,9 +47,9 @@ export class PropertyService {
   }
 
   static async updateProperty(
-    propertyId: number,
+    propertyId: EntityId,
     data: Partial<Pick<IPropertyRow, "property_name" | "address" | "city" | "area" | "access_notes" | "lat" | "lng">>,
-    userId?: number
+    userId?: EntityId
   ): Promise<void> {
     const prop = await PropertyRepository.findById(propertyId);
     if (!prop) throw new AppError("Property not found", 404);
@@ -71,7 +72,7 @@ export class PropertyService {
     await PropertyRepository.update(propertyId, data);
   }
 
-  static async deleteProperty(propertyId: number, userId?: number): Promise<void> {
+  static async deleteProperty(propertyId: EntityId, userId?: EntityId): Promise<void> {
     const prop = await PropertyRepository.findById(propertyId);
     if (!prop) throw new AppError("Property not found", 404);
 
