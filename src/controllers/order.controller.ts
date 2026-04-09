@@ -99,7 +99,11 @@ export const createOrder = async (req: Request, res: Response) => {
  *         name: status
  *         schema:
  *           type: string
- *           enum: [pending, assigned, transit, arrived, washing, drying, ironing, quality_check, ready_to_delivery, collected, delivered, invoiced, completed, cancelled, rescheduled]
+ *           enum: [pending, assigned, transit, arrived, washing, drying, ironing, quality_check, ready_to_delivery, collected, delivered, completed, cancelled, rescheduled]
+ *       - in: query
+ *         name: is_invoiced
+ *         schema: { type: boolean }
+ *         description: Filtrar por órdenes facturadas o no.
  *       - in: query
  *         name: client_id
  *         schema: { type: integer }
@@ -258,7 +262,7 @@ export const updateOrder = async (req: Request, res: Response) => {
     const order = await OrderService.updateOrder(Number(req.params.id), req.body, userId);
     return sendSuccess(res, 200, "Order updated", order);
   } catch (error: any) {
-    return sendError(res, 400, "Order update failed");
+    return sendError(res, error.statusCode ?? 400, error.message || "Order update failed");
   }
 };
 
@@ -297,7 +301,7 @@ export const updateOrder = async (req: Request, res: Response) => {
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [pending, assigned, transit, arrived, washing, drying, ironing, quality_check, ready_to_delivery, collected, delivered, invoiced, completed, cancelled]
+ *                 enum: [pending, assigned, transit, arrived, washing, drying, ironing, quality_check, ready_to_delivery, collected, delivered, completed, cancelled]
  *               actual_bags:
  *                 type: integer
  *                 description: Requerido cuando status = transit
@@ -317,6 +321,21 @@ export const updateOrder = async (req: Request, res: Response) => {
  *               note:
  *                 type: string
  *                 description: Nota genérica registrada en el historial de estado
+ *               staff_confirmed_bags:
+ *                 type: integer
+ *                 description: Conteo de bolsas confirmado por el staff en planta (para estado arrived)
+ *               items:
+ *                 type: array
+ *                 description: Inventario real contado por staff (para estado arrived, dispara recalculo de subtotal e IVA)
+ *                 items:
+ *                   type: object
+ *                   required: [item_id, quantity]
+ *                   properties:
+ *                     item_id: { type: integer }
+ *                     quantity: { type: integer }
+ *                     qty_good: { type: integer }
+ *                     qty_bad: { type: integer }
+ *                     qty_stained: { type: integer }
  *     responses:
  *       200:
  *         description: Estado actualizado correctamente

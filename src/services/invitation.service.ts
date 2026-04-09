@@ -2,6 +2,7 @@ import pool from "../db/pool";
 import { InvitationRepository } from "../repositories/invitation.repository";
 import { UserRepository } from "../repositories/user.repository";
 import { RoleRepository } from "../repositories/role.repository";
+import { ClientProfileRepository } from "../repositories/clientProfile.repository";
 import { generateInviteToken } from "../utils/crypto";
 import { sendInvitationEmail } from "../utils/mail";
 import { AppError } from "../utils/AppError";
@@ -22,7 +23,7 @@ const clientUrl = () => process.env.CLIENT_URL || "http://localhost:5173";
 export class InvitationService {
   static async createInvitation(
     email: string,
-    role: "admin" | "staff" | "driver",
+    role: UserRole,
     createdByUserId: number
   ) {
     // Check if user already exists
@@ -104,7 +105,17 @@ export class InvitationService {
 
   static async registerViaInvitation(
     token: string,
-    data: { name: string; password: string; phone?: string; language?: "en" | "es" }
+    data: { 
+      name: string; 
+      password: string; 
+      phone?: string; 
+      language?: "en" | "es";
+      client_profile?: {
+        contact_person: string;
+        vat_number: string;
+        billing_address: string;
+      }
+    }
   ) {
     const invitation = await InvitationRepository.findByToken(token);
 
@@ -137,6 +148,18 @@ export class InvitationService {
         role_id: roleId,
         is_active: true,
       });
+
+      if (invitation.role === "client") {
+        if (!data.client_profile) {
+          throw new AppError("Los datos del perfil de cliente son obligatorios", 400);
+        }
+        await ClientProfileRepository.insert(conn, {
+          user_id: userId,
+          contact_person: data.client_profile.contact_person,
+          vat_number: data.client_profile.vat_number,
+          billing_address: data.client_profile.billing_address,
+        });
+      }
 
       await InvitationRepository.markUsed(conn, token);
 

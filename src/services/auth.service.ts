@@ -18,14 +18,18 @@ import type { RegisterRequestBody } from "../validation/user.validation";
 const SALT_ROUNDS = 10;
 
 const toTokenRole = (role: string): UserRole =>
-  (["admin", "client", "driver", "staff"].includes(role)
+  (["admin", "client", "driver", "staff", "operator"].includes(role)
     ? (role as UserRole)
     : "client");
 
 export class AuthService {
   /** `client`: cookies + tokens. `admin` / `staff` / `driver`: solo admin autenticado; sin cookies para el usuario creado. */
-  static async register(data: RegisterRequestBody): Promise<{ user: IUserMySQL; tokens: AuthTokens | null }> {
+  static async register(
+    data: RegisterRequestBody,
+    options?: { issueSession?: boolean },
+  ): Promise<{ user: IUserMySQL; tokens: AuthTokens | null }> {
     const role = data.role ?? "client";
+    const issueSession = options?.issueSession ?? true;
     if (role === "client") {
       const payload: RegisterClientPayload = {
         name: data.name,
@@ -39,6 +43,10 @@ export class AuthService {
         payload.properties = data.properties as PropertyCreateRow[];
       }
       const user = await UserRegistrationService.registerClient(payload);
+      if (!issueSession) {
+        return { user, tokens: null };
+      }
+
       const tokens = generateAuthTokens(user.id!, toTokenRole(user.role!));
       await UserRepository.updateRefreshToken(user.id!, tokens.refreshToken);
       return { user, tokens };

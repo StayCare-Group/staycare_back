@@ -9,6 +9,10 @@ const orderItemSchema = z.object({
   name: z.string().optional(),
   unit_price: z.number().optional(),
   total_price: z.number().optional(),
+  // Condition breakdown — used by receiveInPlant; passed through if present
+  qty_good: z.number().int().min(0).optional(),
+  qty_bad: z.number().int().min(0).optional(),
+  qty_stained: z.number().int().min(0).optional(),
 });
 
 export const createOrderSchema = z.object({
@@ -23,7 +27,8 @@ export const createOrderSchema = z.object({
     }),
     estimated_bags: z.number().int().positive().optional(),
     special_notes: z.string().optional(),
-    items: z.array(orderItemSchema).min(1), // Require at least one item
+    items: z.array(orderItemSchema).optional(), // Los ítems se pueden omitir y confirmar al recibir en planta
+
   }),
 });
 
@@ -76,6 +81,8 @@ export const advanceStatusSchema = z.object({
     notes: z.string().optional(),
     // Staff — recepción en facility
     internal_notes: z.string().optional(),
+    staff_confirmed_bags: z.number().int().positive().optional(),
+    items: z.array(orderItemSchema).optional(),
     // Historia genérica
     note: z.string().optional(),
   }),

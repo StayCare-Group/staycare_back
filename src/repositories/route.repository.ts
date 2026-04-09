@@ -73,12 +73,18 @@ export class RouteRepository {
     if (finalRoutes.length > 0) {
       const routeIds = finalRoutes.map((r) => r.id);
       const [allOrders] = await pool.query<RowDataPacket[]>(
-        `SELECT ro.route_id, ro.order_id, ro.position, o.order_number, o.status,
-                u.name as client_company, cp.contact_person as client_contact, u.phone as client_phone
+        `SELECT ro.route_id, ro.order_id, ro.position, 
+                o.order_number, o.status, o.service_type, o.pickup_date, 
+                o.pickup_window_start, o.pickup_window_end, o.estimated_bags, 
+                o.actual_bags, o.special_notes, o.total, o.is_invoiced,
+                u.name as client_name, cp.contact_person as client_contact, u.phone as client_phone,
+                p.property_name, p.address as property_address, p.city as property_city, 
+                p.area as property_area, p.access_notes as property_access_notes
          FROM route_orders ro
          JOIN orders o ON ro.order_id = o.id
          JOIN users u ON o.client_id = u.id
          LEFT JOIN client_profiles cp ON u.id = cp.user_id
+         LEFT JOIN properties p ON o.property_id = p.id
          WHERE ro.route_id IN (?)
          ORDER BY ro.route_id, ro.position ASC`,
         [routeIds]
@@ -90,7 +96,10 @@ export class RouteRepository {
         if (!ordersByRouteId[ord.route_id]) {
           ordersByRouteId[ord.route_id] = [];
         }
-        ordersByRouteId[ord.route_id]!.push(ord);
+        ordersByRouteId[ord.route_id]!.push({
+          ...ord,
+          is_invoiced: Boolean(ord.is_invoiced)
+        });
       });
 
       finalRoutes.forEach((r) => {
@@ -118,12 +127,18 @@ export class RouteRepository {
     if (!rows[0]) return null;
 
     const [orders] = await pool.execute<RowDataPacket[]>(
-      `SELECT ro.order_id, ro.position, o.order_number, o.status,
-              u.name as client_company, cp.contact_person as client_contact, u.phone as client_phone
+      `SELECT ro.order_id, ro.position, 
+              o.order_number, o.status, o.service_type, o.pickup_date, 
+              o.pickup_window_start, o.pickup_window_end, o.estimated_bags, 
+              o.actual_bags, o.special_notes, o.total, o.is_invoiced,
+              u.name as client_name, cp.contact_person as client_contact, u.phone as client_phone,
+              p.property_name, p.address as property_address, p.city as property_city, 
+              p.area as property_area, p.access_notes as property_access_notes
        FROM route_orders ro
        JOIN orders o ON ro.order_id = o.id
        JOIN users u ON o.client_id = u.id
        LEFT JOIN client_profiles cp ON u.id = cp.user_id
+       LEFT JOIN properties p ON o.property_id = p.id
        WHERE ro.route_id = ?
        ORDER BY ro.position ASC`,
       [id]
@@ -131,7 +146,10 @@ export class RouteRepository {
 
     return {
       ...rows[0],
-      orders: orders,
+      orders: (orders as any[]).map((o) => ({
+        ...o,
+        is_invoiced: Boolean(o.is_invoiced)
+      })),
     };
   }
 

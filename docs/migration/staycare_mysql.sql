@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS `staycare`.`invitations` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `token` VARCHAR(100) NOT NULL COMMENT 'UUID hex de 64 chars',
   `email` VARCHAR(150) NOT NULL,
-  `role` ENUM('admin', 'staff', 'driver') NOT NULL COMMENT 'Nunca client — ese rol se crea via /auth/register',
+  `role` ENUM('admin', 'staff', 'driver', 'operator', 'client') NOT NULL COMMENT 'Invitaciones permitidas para todos los roles',
   `created_by` INT UNSIGNED NOT NULL COMMENT 'Admin que generó la invitación',
   `used` TINYINT(1) NOT NULL DEFAULT '0',
   `used_at` DATETIME NULL DEFAULT NULL,
@@ -236,7 +236,8 @@ CREATE TABLE IF NOT EXISTS `staycare`.`orders` (
   `actual_bags` SMALLINT UNSIGNED NULL DEFAULT NULL COMMENT 'Bolsas reales contadas en recogida',
   `staff_confirmed_bags` SMALLINT UNSIGNED NULL DEFAULT NULL COMMENT 'Bolsas reales recibidas en planta',
   `special_notes` TEXT NULL DEFAULT NULL,
-  `status` ENUM('Pending', 'Assigned', 'Transit', 'Arrived', 'Washing', 'Drying', 'Ironing', 'QualityCheck', 'ReadyToDeliver', 'Collected', 'Delivered', 'facturado', 'Completed') NOT NULL DEFAULT 'Pending',
+  `status` ENUM('Pending', 'Assigned', 'Transit', 'Arrived', 'Washing', 'Drying', 'Ironing', 'QualityCheck', 'ReadyToDeliver', 'Collected', 'Delivered', 'Completed') NOT NULL DEFAULT 'Pending',
+  `is_invoiced` TINYINT(1) NOT NULL DEFAULT '0',
   `subtotal` DECIMAL(10,2) NOT NULL DEFAULT '0.00',
   `vat_percentage` DECIMAL(5,2) NOT NULL DEFAULT '18.00',
   `vat_amount` DECIMAL(10,2) NOT NULL DEFAULT '0.00',
@@ -540,7 +541,8 @@ INSERT INTO `staycare`.`roles` (`id`, `name`) VALUES
 (1, 'admin'),
 (2, 'staff'),
 (3, 'driver'),
-(4, 'client')
+(4, 'client'),
+(5, 'operator')
 ON DUPLICATE KEY UPDATE name=name;
 
 -- -----------------------------------------------------
@@ -550,7 +552,8 @@ INSERT INTO `staycare`.`users` (`id`, `name`, `email`, `password_hash`, `role_id
 (1, 'System Admin', 'admin@staycare.com', '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', 1),
 (2, 'Plant Staff', 'staff@staycare.com', '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', 2),
 (3, 'Main Driver', 'driver@staycare.com', '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', 3),
-(4, 'Test Client', 'client@staycare.com', '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', 4)
+(4, 'Test Client', 'client@staycare.com', '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', 4),
+(5, 'Main Operator', 'operator@staycare.com', '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', 5)
 ON DUPLICATE KEY UPDATE email=email;
 
 

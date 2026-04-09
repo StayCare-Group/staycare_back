@@ -8,6 +8,7 @@ export interface IClientProfileRow {
   id?: number;
   user_id: number;
   contact_person: string;
+  vat_number: string;
   billing_address: string;
   credits_terms_days: number;
   pricing_tier: PricingTier;
@@ -19,6 +20,7 @@ export type ClientListRow = {
   client_profile_id: number;
   user_id: number;
   contact_person: string;
+  vat_number: string;
   billing_address: string;
   credits_terms_days: number;
   pricing_tier: PricingTier;
@@ -35,7 +37,7 @@ export class ClientProfileRepository {
 
   static async findByUserId(userId: number): Promise<IClientProfileRow | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT id, user_id, contact_person, billing_address,
+      `SELECT id, user_id, contact_person, vat_number, billing_address,
               credits_terms_days, pricing_tier, created_at, updated_at
        FROM client_profiles WHERE user_id = ? LIMIT 1`,
       [userId]
@@ -45,7 +47,7 @@ export class ClientProfileRepository {
 
   static async findById(id: number): Promise<IClientProfileRow | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT id, user_id, contact_person, billing_address,
+      `SELECT id, user_id, contact_person, vat_number, billing_address,
               credits_terms_days, pricing_tier, created_at, updated_at
        FROM client_profiles WHERE id = ? LIMIT 1`,
       [id]
@@ -102,7 +104,7 @@ export class ClientProfileRepository {
     params.push(limit, offset);
 
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT cp.id AS client_profile_id, cp.user_id, cp.contact_person, cp.billing_address,
+      `SELECT cp.id AS client_profile_id, cp.user_id, cp.contact_person, cp.vat_number, cp.billing_address,
               cp.credits_terms_days, cp.pricing_tier, cp.created_at, cp.updated_at,
               u.name AS user_name, u.email, u.phone, u.language, u.is_active
        FROM client_profiles cp
@@ -118,12 +120,13 @@ export class ClientProfileRepository {
   static async update(
     clientProfileId: number,
     data: Partial<
-      Pick<IClientProfileRow, "contact_person" | "billing_address" | "credits_terms_days" | "pricing_tier">
+      Pick<IClientProfileRow, "contact_person" | "vat_number" | "billing_address" | "credits_terms_days" | "pricing_tier">
     >
   ): Promise<void> {
 
     const allowed: Record<string, unknown> = {};
     if (data.contact_person !== undefined) allowed.contact_person = data.contact_person;
+    if (data.vat_number !== undefined) allowed.vat_number = data.vat_number;
     if (data.billing_address !== undefined) allowed.billing_address = data.billing_address;
     if (data.credits_terms_days !== undefined) allowed.credits_terms_days = data.credits_terms_days;
     if (data.pricing_tier !== undefined) allowed.pricing_tier = data.pricing_tier;
@@ -142,6 +145,7 @@ export class ClientProfileRepository {
     row: {
       user_id: number;
       contact_person: string;
+      vat_number: string;
       billing_address: string;
       credits_terms_days?: number;
       pricing_tier?: PricingTier;
@@ -149,11 +153,12 @@ export class ClientProfileRepository {
   ): Promise<number> {
     const [result] = await conn.execute<ResultSetHeader>(
       `INSERT INTO client_profiles
-        (user_id, contact_person, billing_address, credits_terms_days, pricing_tier)
-       VALUES (?, ?, ?, ?, ?)`,
+        (user_id, contact_person, vat_number, billing_address, credits_terms_days, pricing_tier)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
         row.user_id,
         row.contact_person,
+        row.vat_number,
         row.billing_address,
         row.credits_terms_days ?? 30,
         row.pricing_tier ?? "standard",

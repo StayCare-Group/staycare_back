@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { CookieOptions } from "express";
 
-export type UserRole = "admin" | "client" | "driver" | "staff";
+export type UserRole = "admin" | "client" | "driver" | "staff" | "operator";
 
 export interface AccessTokenPayload {
   userId: string;

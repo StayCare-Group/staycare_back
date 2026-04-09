@@ -11,6 +11,7 @@ const SALT_ROUNDS = 10;
 export type UpdateClientProfileBody = {
   company_name?: string;
   contact_person?: string;
+  vat_number?: string;
   email?: string;
   phone?: string | null;
   billing_address?: string;
@@ -27,6 +28,7 @@ export type UpdateUserByAdminBody = {
   is_active?: boolean;
   client_profile?: {
     contact_person?: string;
+    vat_number?: string;
     billing_address?: string;
     credits_terms_days?: number;
     pricing_tier?: "standard" | "premium" | "enterprise";
@@ -89,6 +91,7 @@ export class UserService {
 
     const profilePatch: Parameters<typeof ClientProfileRepository.update>[1] = {};
     if (body.contact_person !== undefined) profilePatch.contact_person = body.contact_person;
+    if (body.vat_number !== undefined) profilePatch.vat_number = body.vat_number;
     if (body.billing_address !== undefined) profilePatch.billing_address = body.billing_address;
     if (body.credits_terms_days !== undefined) profilePatch.credits_terms_days = body.credits_terms_days;
     if (body.pricing_tier !== undefined) profilePatch.pricing_tier = body.pricing_tier;

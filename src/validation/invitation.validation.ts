@@ -3,8 +3,8 @@ import { z } from "zod";
 export const createInvitationSchema = z.object({
   body: z.object({
     email: z.string().email("Invalid email"),
-    role: z.enum(["admin", "driver", "staff"], {
-      message: "Role must be admin, driver, or staff",
+    role: z.enum(["admin", "driver", "staff", "operator", "client"], {
+      message: "Role must be admin, driver, staff, operator, or client",
     }),
   }),
 });
@@ -18,6 +18,11 @@ export const registerViaInviteSchema = z.object({
     password: z.string().min(6, "Password must be at least 6 characters"),
     phone: z.string().optional(),
     language: z.enum(["en", "es"]).optional(),
+    client_profile: z.object({
+      contact_person: z.string().min(2),
+      vat_number: z.string().min(2),
+      billing_address: z.string().min(5),
+    }).optional(),
   }),
 });
 

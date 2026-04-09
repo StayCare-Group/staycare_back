@@ -1,12 +1,13 @@
 import pool from "../db/pool";
 import type { PoolConnection } from "mysql2/promise";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
+import type { UserRole } from "../utils/jwt";
 
 export interface IInvitationMySQL {
   id: number;
   token: string;
   email: string;
-  role: "admin" | "staff" | "driver";
+  role: UserRole;
   created_by: number;
   used: boolean;
   used_at: Date | null;
@@ -45,7 +46,7 @@ export class InvitationRepository {
     data: {
       token: string;
       email: string;
-      role: "admin" | "staff" | "driver";
+      role: UserRole;
       created_by: number;
       expires_at: Date;
     }

@@ -14,6 +14,7 @@ export const updateClientSchema = z.object({
   body: z.object({
     company_name: z.string().min(1).optional(),
     contact_person: z.string().min(1).optional(),
+    vat_number: z.string().min(1).optional(),
     email: z.string().email().optional(),
     phone: z.string().min(1).optional().nullable(),
     billing_address: z.string().min(1).optional(),
