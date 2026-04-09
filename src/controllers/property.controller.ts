@@ -31,14 +31,14 @@ import { AppError } from "../utils/AppError";
  */
 export const getUserProperties = async (req: Request, res: Response) => {
   try {
-    const rawId = req.params.userId;
+    const rawId = req.params.userId as string;
     let userId: string;
 
     if (rawId === "me") {
       userId = req.user!.userId;
     } else {
       userId = rawId;
-      
+
       // Permission check: if not admin or staff, can only see their own properties
       if (req.user!.role !== "admin" && req.user!.role !== "staff" && userId !== req.user!.userId) {
         return sendError(res, 403, "Forbidden: You can only view your own properties");
@@ -74,7 +74,7 @@ export const getUserProperties = async (req: Request, res: Response) => {
  */
 export const addProperty = async (req: Request, res: Response) => {
   try {
-    const idParam = req.params.userId || "me"; 
+    const idParam = (req.params.userId || "me") as string;
     let userId: string;
 
     if (idParam === "me") {
@@ -150,7 +150,7 @@ export const addProperty = async (req: Request, res: Response) => {
  */
 export const updateProperty = async (req: Request, res: Response) => {
   try {
-    const propertyId = req.params.id;
+    const propertyId = req.params.id as string;
 
     const userId = req.user!.role === "admin" ? undefined : req.user!.userId;
 
@@ -181,7 +181,7 @@ export const updateProperty = async (req: Request, res: Response) => {
  */
 export const deleteProperty = async (req: Request, res: Response) => {
   try {
-    const propertyId = req.params.id;
+    const propertyId = req.params.id as string;
 
     const userId = req.user!.role === "admin" ? undefined : req.user!.userId;
 

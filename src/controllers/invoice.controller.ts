@@ -178,7 +178,7 @@ export const getInvoiceById = async (req: Request, res: Response) => {
   try {
     const invoiceId = req.params.id;
 
-    const invoice = await InvoiceService.getInvoiceById(invoiceId);
+    const invoice = await InvoiceService.getInvoiceById(invoiceId as string);
     if (!invoice) return sendError(res, 404, "Invoice not found");
 
     // Return full objects for orders
@@ -237,7 +237,7 @@ export const recordPayment = async (req: Request, res: Response) => {
 
     const { amount, method, transaction_reference } = req.body;
 
-    const invoice = await InvoiceService.recordPayment(invoiceId, {
+    const invoice = await InvoiceService.recordPayment(invoiceId as string, {
       amount: Number(amount),
       method,
       transaction_reference,

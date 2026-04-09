@@ -42,9 +42,9 @@ export const getAllClients = async (req: Request, res: Response) => {
       is_active,
       search,
     };
-    
+
     const { rows, total } = await UserService.getAllClients(page, limit, filter);
-    
+
     return sendSuccess(res, 200, "Clients retrieved", rows, paginationMeta(total, page, limit));
 
   } catch (error: unknown) {
@@ -57,14 +57,14 @@ export const getAllClients = async (req: Request, res: Response) => {
 export const getClientById = async (req: Request, res: Response) => {
   try {
     const userId = req.params.id;
-    
+
     // Check ownership if client
     if (req.user!.role === "client") {
-      const isOwner = await UserService.userOwnsProfile(req.user!.userId, userId);
+      const isOwner = await UserService.userOwnsProfile(req.user!.userId, userId as string);
       if (!isOwner) return sendError(res, 403, "Forbidden");
     }
 
-    const detail = await UserService.getUserDetailByUserId(userId);
+    const detail = await UserService.getUserDetailByUserId(userId as string);
     if (!detail) return sendError(res, 404, "Client not found");
     return sendSuccess(res, 200, "Client retrieved", detail);
   } catch (error: unknown) {
@@ -79,11 +79,11 @@ export const updateClient = async (req: Request, res: Response) => {
 
     // Check ownership if client
     if (req.user!.role === "client") {
-      const isOwner = await UserService.userOwnsProfile(req.user!.userId, userId);
+      const isOwner = await UserService.userOwnsProfile(req.user!.userId, userId as string);
       if (!isOwner) return sendError(res, 403, "Forbidden");
     }
 
-    await UserService.updateClientProfile(userId, req.body);
+    await UserService.updateClientProfile(userId as string, req.body);
     return sendSuccess(res, 200, "Client updated");
   } catch (error: unknown) {
     if (error instanceof AppError) return sendError(res, error.statusCode, error.message);
@@ -94,8 +94,8 @@ export const updateClient = async (req: Request, res: Response) => {
 export const deleteClient = async (req: Request, res: Response) => {
   try {
     const userId = req.params.id;
-    
-    await UserService.deleteUserById(userId);
+
+    await UserService.deleteUserById(userId as string);
     return sendSuccess(res, 200, "Client deleted");
   } catch (error: unknown) {
     if (error instanceof AppError) return sendError(res, error.statusCode, error.message);

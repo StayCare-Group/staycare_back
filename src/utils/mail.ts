@@ -94,7 +94,6 @@ const STATUS_LABELS: Record<string, string> = {
   [OrderStatus.READY_TO_DELIVERY]: "Ready to Delivery",
   [OrderStatus.COLLECTED]: "Out for Delivery",
   [OrderStatus.DELIVERED]: "Delivered",
-  [OrderStatus.INVOICED]: "Invoiced",
   [OrderStatus.COMPLETED]: "Completed",
   [OrderStatus.CANCELLED]: "Cancelled",
   [OrderStatus.RESCHEDULED]: "Rescheduled",
