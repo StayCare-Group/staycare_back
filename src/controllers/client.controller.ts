@@ -56,8 +56,7 @@ export const getAllClients = async (req: Request, res: Response) => {
 
 export const getClientById = async (req: Request, res: Response) => {
   try {
-    const userId = Number(req.params.id);
-    if (isNaN(userId)) return sendError(res, 400, "Invalid user ID");
+    const userId = req.params.id;
     
     // Check ownership if client
     if (req.user!.role === "client") {
@@ -76,8 +75,7 @@ export const getClientById = async (req: Request, res: Response) => {
 
 export const updateClient = async (req: Request, res: Response) => {
   try {
-    const userId = Number(req.params.id);
-    if (isNaN(userId)) return sendError(res, 400, "Invalid user ID");
+    const userId = req.params.id;
 
     // Check ownership if client
     if (req.user!.role === "client") {
@@ -95,8 +93,7 @@ export const updateClient = async (req: Request, res: Response) => {
 
 export const deleteClient = async (req: Request, res: Response) => {
   try {
-    const userId = Number(req.params.id);
-    if (isNaN(userId)) return sendError(res, 400, "Invalid user ID");
+    const userId = req.params.id;
     
     await UserService.deleteUserById(userId);
     return sendSuccess(res, 200, "Client deleted");

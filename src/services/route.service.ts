@@ -3,17 +3,18 @@ import { RouteRepository } from "../repositories/route.repository";
 import { OrderRepository } from "../repositories/order.repository";
 import { OrderStatus } from "../types/orderStatus";
 import { AppError } from "../utils/AppError";
+import type { EntityId } from "../utils/id";
 
 interface RouteCreateInput {
   route_date: string;
-  driver_id: number;
+  driver_id: EntityId;
   area: string;
   status?: "planned" | "in_progress" | "completed";
-  order_ids?: number[];
+  order_ids?: EntityId[];
 }
 
 export class RouteService {
-  static async createRoute(data: RouteCreateInput, userId: number) {
+  static async createRoute(data: RouteCreateInput, userId: EntityId) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -62,18 +63,18 @@ export class RouteService {
     return await RouteRepository.findAll(filter, limit, skip);
   }
 
-  static async getRouteById(id: number | string) {
+  static async getRouteById(id: EntityId) {
     const route = await RouteRepository.findById(id);
     if (!route) throw new AppError("Route not found", 404);
     return route;
   }
 
-  static async updateRoute(id: number | string, data: any) {
+  static async updateRoute(id: EntityId, data: any) {
     await RouteRepository.update(id, data);
     return await RouteRepository.findById(id);
   }
 
-  static async deleteRoute(id: number | string) {
+  static async deleteRoute(id: EntityId) {
     const route = await RouteRepository.findById(id);
     if (!route) throw new AppError("Route not found", 404);
     if (route.status !== "planned") {

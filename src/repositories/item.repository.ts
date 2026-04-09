@@ -1,8 +1,9 @@
 import pool from "../db/pool";
-import type { RowDataPacket, ResultSetHeader } from "mysql2";
+import type { RowDataPacket } from "mysql2";
+import { generateEntityId, type EntityId } from "../utils/id";
 
 export interface IItemRow extends RowDataPacket {
-  id: number;
+  id: EntityId;
   item_code: string;
   name: string;
   base_price: number;
@@ -81,7 +82,7 @@ export class ItemRepository {
   }
 
 
-  static async findById(id: number | string): Promise<IItemRow | null> {
+  static async findById(id: EntityId): Promise<IItemRow | null> {
     const [rows] = await pool.execute<IItemRow[]>("SELECT * FROM items WHERE id = ?", [id]);
     return rows[0] || null;
   }
@@ -91,16 +92,17 @@ export class ItemRepository {
     return rows[0] || null;
   }
 
-  static async insert(data: ItemInsertInput): Promise<number> {
-    const [result] = await pool.execute<ResultSetHeader>(
-      "INSERT INTO items (item_code, name, base_price) VALUES (?, ?, ?)",
-      [data.item_code, data.name, data.base_price]
+  static async insert(data: ItemInsertInput): Promise<EntityId> {
+    const id = generateEntityId();
+    await pool.execute(
+      "INSERT INTO items (id, item_code, name, base_price) VALUES (?, ?, ?, ?)",
+      [id, data.item_code, data.name, data.base_price]
     );
-    return result.insertId;
+    return id;
   }
 
   static async update(
-    id: number | string,
+    id: EntityId,
     data: Partial<ItemInsertInput> & { is_active?: boolean },
   ): Promise<void> {
     const fields = Object.keys(data);
@@ -112,7 +114,7 @@ export class ItemRepository {
     await pool.execute(`UPDATE items SET ${setClause} WHERE id = ?`, values);
   }
 
-  static async delete(id: number | string): Promise<void> {
+  static async delete(id: EntityId): Promise<void> {
     await pool.execute("DELETE FROM items WHERE id = ?", [id]);
   }
 }

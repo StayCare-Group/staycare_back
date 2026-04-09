@@ -8,7 +8,7 @@ export class ItemService {
   }
 
 
-  static async getItemById(id: number | string) {
+  static async getItemById(id: string) {
     return await ItemRepository.findById(id);
   }
 
@@ -21,13 +21,13 @@ export class ItemService {
     return await ItemRepository.findById(id);
   }
 
-  static async updateItem(id: number | string, data: Partial<ItemInsertInput> & { is_active?: boolean }) {
+  static async updateItem(id: string, data: Partial<ItemInsertInput> & { is_active?: boolean }) {
     await ItemRepository.update(id, data);
     return await ItemRepository.findById(id);
   }
 
 
-  static async deleteItem(id: number | string) {
+  static async deleteItem(id: string) {
     return await ItemRepository.delete(id);
   }
 

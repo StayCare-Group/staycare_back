@@ -1,13 +1,14 @@
 import pool from "../db/pool";
 import type { PoolConnection } from "mysql2/promise";
 import type { RowDataPacket, ResultSetHeader } from "mysql2";
+import { generateEntityId, type EntityId } from "../utils/id";
 
 export type InvoiceStatus = "pending" | "paid" | "overdue";
 
 export interface IInvoiceMySQL {
-  id: number;
+  id: EntityId;
   invoice_number: string;
-  client_id: number;
+  client_id: EntityId;
   issue_date: string;
   due_date: string;
   subtotal: number;
@@ -23,8 +24,8 @@ export interface IInvoiceMySQL {
 }
 
 export interface IInvoiceLineItemMySQL {
-  id: number;
-  invoice_id: number;
+  id: EntityId;
+  invoice_id: EntityId;
   description: string;
   quantity: number;
   unit_price: number;
@@ -32,8 +33,8 @@ export interface IInvoiceLineItemMySQL {
 }
 
 export interface IInvoicePaymentMySQL {
-  id: number;
-  invoice_id: number;
+  id: EntityId;
+  invoice_id: EntityId;
   amount: number;
   method: "cash" | "bank_transfer" | "card";
   transaction_reference: string;
@@ -43,11 +44,11 @@ export interface IInvoicePaymentMySQL {
 export class InvoiceRepository {
   // ─── Base find helpers ─────────────────────────────────────────────────────
 
-  static async findById(id: number | string): Promise<
+  static async findById(id: EntityId): Promise<
     (IInvoiceMySQL & {
       line_items: IInvoiceLineItemMySQL[];
       payments: IInvoicePaymentMySQL[];
-      orders: { id: number; order_number: string; status: string }[];
+      orders: { id: EntityId; order_number: string; status: string }[];
     }) | null
   > {
     const [rows] = await pool.execute<RowDataPacket[]>(
@@ -73,7 +74,7 @@ export class InvoiceRepository {
     return { ...invoice, line_items: lineItems, payments, orders };
   }
 
-  static async findLineItems(invoiceId: number | string): Promise<IInvoiceLineItemMySQL[]> {
+  static async findLineItems(invoiceId: EntityId): Promise<IInvoiceLineItemMySQL[]> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT * FROM invoice_line_items WHERE invoice_id = ?`,
       [invoiceId]
@@ -81,7 +82,7 @@ export class InvoiceRepository {
     return rows as IInvoiceLineItemMySQL[];
   }
 
-  static async findPayments(invoiceId: number | string): Promise<IInvoicePaymentMySQL[]> {
+  static async findPayments(invoiceId: EntityId): Promise<IInvoicePaymentMySQL[]> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT * FROM invoice_payments WHERE invoice_id = ? ORDER BY paid_at ASC`,
       [invoiceId]
@@ -89,7 +90,7 @@ export class InvoiceRepository {
     return rows as IInvoicePaymentMySQL[];
   }
 
-  static async findOrders(invoiceId: number | string): Promise<{ id: number; order_number: string; status: string }[]> {
+  static async findOrders(invoiceId: EntityId): Promise<{ id: EntityId; order_number: string; status: string }[]> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT o.id, o.order_number, o.status
        FROM orders o
@@ -105,11 +106,13 @@ export class InvoiceRepository {
   static async insert(
     conn: PoolConnection,
     data: Omit<IInvoiceMySQL, "id" | "created_at" | "updated_at" | "client_name" | "contact_person">
-  ): Promise<number> {
-    const [result] = await conn.execute<ResultSetHeader>(
-      `INSERT INTO invoices (invoice_number, client_id, issue_date, due_date, subtotal, vat_percentage, vat_amount, total, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ): Promise<EntityId> {
+    const id = generateEntityId();
+    await conn.execute(
+      `INSERT INTO invoices (id, invoice_number, client_id, issue_date, due_date, subtotal, vat_percentage, vat_amount, total, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        id,
         data.invoice_number,
         data.client_id,
         data.issue_date,
@@ -121,21 +124,22 @@ export class InvoiceRepository {
         data.status,
       ]
     );
-    return result.insertId;
+    return id;
   }
 
   static async insertLineItem(
     conn: PoolConnection,
     item: Omit<IInvoiceLineItemMySQL, "id">
   ): Promise<void> {
+    const id = generateEntityId();
     await conn.execute(
-      `INSERT INTO invoice_line_items (invoice_id, description, quantity, unit_price, total_price)
-       VALUES (?, ?, ?, ?, ?)`,
-      [item.invoice_id, item.description, item.quantity, item.unit_price, item.total_price]
+      `INSERT INTO invoice_line_items (id, invoice_id, description, quantity, unit_price, total_price)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, item.invoice_id, item.description, item.quantity, item.unit_price, item.total_price]
     );
   }
 
-  static async linkOrder(conn: PoolConnection, invoiceId: number, orderId: number): Promise<void> {
+  static async linkOrder(conn: PoolConnection, invoiceId: EntityId, orderId: EntityId): Promise<void> {
     await conn.execute(
       `INSERT IGNORE INTO invoice_orders (invoice_id, order_id) VALUES (?, ?)`,
       [invoiceId, orderId]
@@ -145,19 +149,20 @@ export class InvoiceRepository {
   static async insertPayment(
     conn: PoolConnection,
     payment: Omit<IInvoicePaymentMySQL, "id" | "paid_at">
-  ): Promise<number> {
-    const [result] = await conn.execute<ResultSetHeader>(
-      `INSERT INTO invoice_payments (invoice_id, amount, method, transaction_reference)
-       VALUES (?, ?, ?, ?)`,
-      [payment.invoice_id, payment.amount, payment.method, payment.transaction_reference]
+  ): Promise<EntityId> {
+    const id = generateEntityId();
+    await conn.execute(
+      `INSERT INTO invoice_payments (id, invoice_id, amount, method, transaction_reference)
+       VALUES (?, ?, ?, ?, ?)`,
+      [id, payment.invoice_id, payment.amount, payment.method, payment.transaction_reference]
     );
-    return result.insertId;
+    return id;
   }
 
   // ─── Update ────────────────────────────────────────────────────────────────
 
   static async updateStatus(
-    id: number | string,
+    id: EntityId,
     status: InvoiceStatus,
     conn?: PoolConnection
   ): Promise<void> {
@@ -168,7 +173,7 @@ export class InvoiceRepository {
   // ─── Filtered list ─────────────────────────────────────────────────────────
 
   static async findManyFiltered(
-    filter: { status?: string; client_id?: number | string; from?: string; to?: string; search?: string | undefined },
+    filter: { status?: string; client_id?: EntityId | undefined; from?: string; to?: string; search?: string | undefined },
     limit: number,
     offset: number
   ): Promise<IInvoiceMySQL[]> {
@@ -221,7 +226,7 @@ export class InvoiceRepository {
   }
 
   static async countFiltered(
-    filter: { status?: string; client_id?: number | string; from?: string; to?: string; search?: string | undefined }
+    filter: { status?: string; client_id?: EntityId | undefined; from?: string; to?: string; search?: string | undefined }
   ): Promise<number> {
     let where = "1=1";
     const params: any[] = [];
@@ -259,7 +264,7 @@ export class InvoiceRepository {
   }
 
   /** Suma total pagado de una factura */
-  static async sumPayments(invoiceId: number | string): Promise<number> {
+  static async sumPayments(invoiceId: EntityId): Promise<number> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT COALESCE(SUM(amount), 0) AS paid FROM invoice_payments WHERE invoice_id = ?`,
       [invoiceId]

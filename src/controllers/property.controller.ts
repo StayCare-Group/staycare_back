@@ -32,16 +32,15 @@ import { AppError } from "../utils/AppError";
 export const getUserProperties = async (req: Request, res: Response) => {
   try {
     const rawId = req.params.userId;
-    let userId: number;
+    let userId: string;
 
     if (rawId === "me") {
-      userId = Number(req.user!.userId);
+      userId = req.user!.userId;
     } else {
-      userId = Number(rawId);
-      if (isNaN(userId)) return sendError(res, 400, "Invalid user id");
+      userId = rawId;
       
       // Permission check: if not admin or staff, can only see their own properties
-      if (req.user!.role !== "admin" && req.user!.role !== "staff" && userId !== Number(req.user!.userId)) {
+      if (req.user!.role !== "admin" && req.user!.role !== "staff" && userId !== req.user!.userId) {
         return sendError(res, 403, "Forbidden: You can only view your own properties");
       }
     }
@@ -76,16 +75,15 @@ export const getUserProperties = async (req: Request, res: Response) => {
 export const addProperty = async (req: Request, res: Response) => {
   try {
     const idParam = req.params.userId || "me"; 
-    let userId: number;
+    let userId: string;
 
     if (idParam === "me") {
-      userId = Number(req.user!.userId);
+      userId = req.user!.userId;
     } else {
-      userId = Number(idParam);
-      if (isNaN(userId)) return sendError(res, 400, "Invalid user id");
+      userId = idParam;
 
       // Permission check: only admin can add property to other users
-      if (req.user!.role !== "admin" && userId !== Number(req.user!.userId)) {
+      if (req.user!.role !== "admin" && userId !== req.user!.userId) {
         return sendError(res, 403, "Forbidden");
       }
     }
@@ -152,10 +150,9 @@ export const addProperty = async (req: Request, res: Response) => {
  */
 export const updateProperty = async (req: Request, res: Response) => {
   try {
-    const propertyId = Number(req.params.id);
-    if (isNaN(propertyId)) return sendError(res, 400, "Invalid property id");
+    const propertyId = req.params.id;
 
-    const userId = req.user!.role === "admin" ? undefined : Number(req.user!.userId);
+    const userId = req.user!.role === "admin" ? undefined : req.user!.userId;
 
     await PropertyService.updateProperty(propertyId, req.body, userId);
     return sendSuccess(res, 200, "Property updated");
@@ -184,10 +181,9 @@ export const updateProperty = async (req: Request, res: Response) => {
  */
 export const deleteProperty = async (req: Request, res: Response) => {
   try {
-    const propertyId = Number(req.params.id);
-    if (isNaN(propertyId)) return sendError(res, 400, "Invalid property id");
+    const propertyId = req.params.id;
 
-    const userId = req.user!.role === "admin" ? undefined : Number(req.user!.userId);
+    const userId = req.user!.role === "admin" ? undefined : req.user!.userId;
 
     await PropertyService.deleteProperty(propertyId, userId);
     return sendSuccess(res, 200, "Property deleted");

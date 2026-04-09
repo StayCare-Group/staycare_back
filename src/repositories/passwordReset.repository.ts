@@ -1,8 +1,9 @@
 import pool from "../db/pool";
-import { RowDataPacket, ResultSetHeader } from "mysql2";
+import { RowDataPacket } from "mysql2";
+import { generateEntityId, type EntityId } from "../utils/id";
 
 export interface IPasswordResetMySQL {
-  id?: number;
+  id?: EntityId;
   email: string;
   token: string;
   expires_at: Date;
@@ -11,12 +12,13 @@ export interface IPasswordResetMySQL {
 }
 
 export class PasswordResetRepository {
-  static async create(data: { email: string; token: string; expires_at: Date }): Promise<number> {
-    const [result] = await pool.execute<ResultSetHeader>(
-      "INSERT INTO password_resets (email, token, expires_at, used) VALUES (?, ?, ?, 0)",
-      [data.email, data.token, data.expires_at]
+  static async create(data: { email: string; token: string; expires_at: Date }): Promise<EntityId> {
+    const id = generateEntityId();
+    await pool.execute(
+      "INSERT INTO password_resets (id, email, token, expires_at, used) VALUES (?, ?, ?, ?, 0)",
+      [id, data.email, data.token, data.expires_at]
     );
-    return result.insertId;
+    return id;
   }
 
   static async findActiveByToken(token: string): Promise<IPasswordResetMySQL | null> {
@@ -27,7 +29,7 @@ export class PasswordResetRepository {
     return (rows[0] as IPasswordResetMySQL) || null;
   }
 
-  static async markAsUsed(id: number): Promise<void> {
+  static async markAsUsed(id: EntityId): Promise<void> {
     await pool.execute(
       "UPDATE password_resets SET used = 1 WHERE id = ?",
       [id]

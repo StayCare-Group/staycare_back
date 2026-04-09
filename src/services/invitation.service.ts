@@ -13,6 +13,7 @@ import {
   getRefreshTokenCookieOptions,
 } from "../utils/jwt";
 import type { UserRole } from "../utils/jwt";
+import type { EntityId } from "../utils/id";
 import bcrypt from "bcryptjs";
 
 const SALT_ROUNDS = 10;
@@ -24,7 +25,7 @@ export class InvitationService {
   static async createInvitation(
     email: string,
     role: UserRole,
-    createdByUserId: number
+    createdByUserId: EntityId
   ) {
     // Check if user already exists
     const existing = await UserRepository.findByEmail(email);
