@@ -37,7 +37,7 @@ import { AppError } from "../utils/AppError";
  */
 export const createRoute = async (req: Request, res: Response) => {
   try {
-    const userId = Number(req.user!.userId);
+    const userId = req.user!.userId;
     const route = await RouteService.createRoute(req.body, userId);
     return sendSuccess(res, 201, "Route created", route);
   } catch (error) {
@@ -92,9 +92,9 @@ export const getAllRoutes = async (req: Request, res: Response) => {
     if (search) filter.search = search;
 
     if (req.user!.role === "driver") {
-      filter.driver_id = Number(req.user!.userId);
+      filter.driver_id = req.user!.userId;
     } else if (driver) {
-      filter.driver_id = Number(driver);
+      filter.driver_id = String(driver);
     }
 
     const { routes, total } = await RouteService.listRoutes(filter, limit, skip);

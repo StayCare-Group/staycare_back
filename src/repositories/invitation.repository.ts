@@ -1,14 +1,15 @@
 import pool from "../db/pool";
 import type { PoolConnection } from "mysql2/promise";
-import type { RowDataPacket, ResultSetHeader } from "mysql2";
+import type { RowDataPacket } from "mysql2";
 import type { UserRole } from "../utils/jwt";
+import { generateEntityId, type EntityId } from "../utils/id";
 
 export interface IInvitationMySQL {
-  id: number;
+  id: EntityId;
   token: string;
   email: string;
   role: UserRole;
-  created_by: number;
+  created_by: EntityId;
   used: boolean;
   used_at: Date | null;
   expires_at: Date;
@@ -47,16 +48,17 @@ export class InvitationRepository {
       token: string;
       email: string;
       role: UserRole;
-      created_by: number;
+      created_by: EntityId;
       expires_at: Date;
     }
-  ): Promise<number> {
-    const [result] = await conn.execute<ResultSetHeader>(
-      `INSERT INTO invitations (token, email, role, created_by, expires_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [data.token, data.email, data.role, data.created_by, data.expires_at]
+  ): Promise<EntityId> {
+    const id = generateEntityId();
+    await conn.execute(
+      `INSERT INTO invitations (id, token, email, role, created_by, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, data.token, data.email, data.role, data.created_by, data.expires_at]
     );
-    return result.insertId;
+    return id;
   }
 
   /** Invalida todas las invitaciones pendientes del mismo email */

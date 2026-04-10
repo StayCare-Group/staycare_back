@@ -242,7 +242,7 @@ export const getMe = async (req: Request, res: Response) => {
  */
 export const updateMe = async (req: Request, res: Response) => {
   try {
-    const userId = Number(req.user!.userId);
+    const userId = req.user!.userId;
     await AuthService.updateMe(userId, req.body);
     
     const { user, client_profile, properties } = await UserService.getUserByIdWithClientProfileIfExists(userId);
@@ -293,7 +293,7 @@ export const updateMe = async (req: Request, res: Response) => {
 export const changePassword = async (req: Request, res: Response) => {
   try {
     const { current_password, new_password } = req.body;
-    await AuthService.changePassword(Number(req.user!.userId), current_password, new_password);
+    await AuthService.changePassword(req.user!.userId, current_password, new_password);
     return sendSuccess(res, 200, "Password changed successfully");
   } catch (error: any) {
     if (error instanceof AppError) return sendError(res, error.statusCode, error.message);
@@ -401,7 +401,7 @@ export const logout = async (req: Request, res: Response) => {
     if (token) {
       const decoded = verifyRefreshToken(token);
       if (decoded?.userId) {
-        await AuthService.logout(Number(decoded.userId));
+        await AuthService.logout(decoded.userId);
       }
     }
 

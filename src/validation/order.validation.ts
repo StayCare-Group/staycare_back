@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { OrderStatus } from "../types/orderStatus";
+import { uuidIdSchema } from "./id.validation";
 
 const orderItemSchema = z.object({
-  item_id: z.number().int(),
+  item_id: uuidIdSchema,
   quantity: z.number().int().positive(),
   // Optional snapshots if sent, but will be overwritten by backend
   item_code: z.string().optional(),
@@ -17,8 +18,8 @@ const orderItemSchema = z.object({
 
 export const createOrderSchema = z.object({
   body: z.object({
-    client_id: z.number().int().optional(), // For admin/staff
-    property_id: z.number().int().optional(),
+    client_id: uuidIdSchema.optional(), // For admin/staff
+    property_id: uuidIdSchema.optional(),
     service_type: z.enum(["standard", "express"]),
     pickup_date: z.string().datetime({ offset: true }).or(z.string().min(1)),
     pickup_window: z.object({
@@ -56,7 +57,7 @@ export const updateOrderSchema = z.object({
     special_notes: z.string().optional(),
     items: z.array(orderItemSchema).optional(),
   }),
-  params: z.object({ id: z.string() }),
+  params: z.object({ id: uuidIdSchema }),
 });
 
 /**
@@ -86,7 +87,7 @@ export const advanceStatusSchema = z.object({
     // Historia genérica
     note: z.string().optional(),
   }),
-  params: z.object({ id: z.string() }),
+  params: z.object({ id: uuidIdSchema }),
 });
 
 export const rescheduleOrderSchema = z.object({
@@ -97,7 +98,7 @@ export const rescheduleOrderSchema = z.object({
       end_time: z.string().min(1),
     }),
   }),
-  params: z.object({ id: z.string() }),
+  params: z.object({ id: uuidIdSchema }),
 });
 
 export const confirmDriverActionSchema = z.object({
@@ -108,5 +109,5 @@ export const confirmDriverActionSchema = z.object({
       .optional(),
     notes: z.string().optional(),
   }),
-  params: z.object({ id: z.string() }),
+  params: z.object({ id: uuidIdSchema }),
 });

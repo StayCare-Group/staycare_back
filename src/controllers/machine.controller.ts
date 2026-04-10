@@ -80,11 +80,11 @@ export const getMachineStatus = async (req: Request, res: Response) => {
 
     const { page, limit, skip } = parsePagination(req);
     const { machines, total } = await MachineService.getAllMachines(limit, skip, { search, type, status });
-    
+
     return sendSuccess(
-      res, 
-      200, 
-      "Facility machine status", 
+      res,
+      200,
+      "Facility machine status",
       machines,
       paginationMeta(total, page, limit)
     );
@@ -171,7 +171,7 @@ export const createMachine = async (req: Request, res: Response) => {
  */
 export const updateMachine = async (req: Request, res: Response) => {
   try {
-    const machine = await MachineService.updateMachine(Number(req.params.id), req.body);
+    const machine = await MachineService.updateMachine(req.params.id as string, req.body);
     return sendSuccess(res, 200, "Machine updated", machine);
   } catch (error: any) {
     const status = error.status ?? 400;
@@ -203,7 +203,7 @@ export const updateMachine = async (req: Request, res: Response) => {
  */
 export const deleteMachine = async (req: Request, res: Response) => {
   try {
-    await MachineService.deleteMachine(Number(req.params.id));
+    await MachineService.deleteMachine(req.params.id as string);
     return sendSuccess(res, 200, "Machine deleted");
   } catch (error: any) {
     const status = error.status ?? 400;
@@ -249,7 +249,7 @@ export const assignMachine = async (req: Request, res: Response) => {
     const { order_id } = req.body;
     if (!order_id) return sendError(res, 400, "order_id is required");
 
-    const machine = await MachineService.assignMachine(Number(req.params.id), Number(order_id));
+    const machine = await MachineService.assignMachine(req.params.id as string, String(order_id));
     return sendSuccess(res, 200, "Machine assigned", machine);
   } catch (error: any) {
     const status = error.status ?? 400;
@@ -279,7 +279,7 @@ export const assignMachine = async (req: Request, res: Response) => {
  */
 export const releaseMachine = async (req: Request, res: Response) => {
   try {
-    const machine = await MachineService.releaseMachine(Number(req.params.id));
+    const machine = await MachineService.releaseMachine(req.params.id as string);
     return sendSuccess(res, 200, "Machine released", machine);
   } catch (error: any) {
     const status = error.status ?? 400;

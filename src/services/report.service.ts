@@ -15,7 +15,7 @@ export class ReportService {
 
   static async getSlaMetrics() {
     const data = await ReportRepository.getSlaData();
-    const grouped = new Map<number, { service_type: string; created_at: Date; history: { status: string; changed_at: Date }[] }>();
+    const grouped = new Map<string, { service_type: string; created_at: Date; history: { status: string; changed_at: Date }[] }>();
 
     for (const row of data) {
       if (!grouped.has(row.id)) {

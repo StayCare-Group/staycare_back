@@ -60,6 +60,16 @@ export async function autoInitDbForDevelopment(): Promise<void> {
       `CREATE DATABASE IF NOT EXISTS ${quoteIdentifier(config.db.database)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
     );
 
+    const [[{ tableCount }]] = await conn.query(
+      `SELECT COUNT(*) AS tableCount FROM information_schema.tables WHERE table_schema = ?`,
+      [config.db.database],
+    ) as any;
+
+    if (tableCount > 0) {
+      console.log(`Development DB already initialized (${tableCount} tables found), skipping schema init.`);
+      return;
+    }
+
     const schemaPath = await resolveSchemaPath();
     const rawSchema = await fs.readFile(schemaPath, "utf8");
     const schemaOnly = extractSchemaOnly(rawSchema);

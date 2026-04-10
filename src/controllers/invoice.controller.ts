@@ -52,15 +52,15 @@ export const createInvoice = async (req: Request, res: Response) => {
     const { client, orders, due_date, line_items, subtotal, vat_percentage, vat_amount, total } = req.body;
 
     const invoice = await InvoiceService.createInvoice({
-      client_id: Number(client),
-      order_ids: (orders as any[]).map(Number),
+      client_id: String(client),
+      order_ids: (orders as any[]).map(String),
       due_date: due_date.slice(0, 10), // Extract YYYY-MM-DD
       line_items,
       subtotal,
       vat_percentage,
       vat_amount,
       total,
-    }, Number(req.user!.userId));
+    }, req.user!.userId);
 
     return sendSuccess(res, 201, "Invoice created", invoice);
   } catch (error: any) {
@@ -110,13 +110,13 @@ export const getAllInvoices = async (req: Request, res: Response) => {
 
     const filter: {
       status?: string | undefined;
-      client_id?: number | string | undefined;
+      client_id?: string | undefined;
       from?: string | undefined;
       to?: string | undefined;
       search?: string | undefined;
     } = {
       status: status as string,
-      client_id: client_id as string | number,
+      client_id: client_id as string,
       from: from as string,
       to: to as string,
       search: search as string,
@@ -124,7 +124,7 @@ export const getAllInvoices = async (req: Request, res: Response) => {
 
     // If client role, force client_id to the authenticated user's ID
     if (req.user!.role === "client") {
-      filter.client_id = Number(req.user!.userId);
+      filter.client_id = req.user!.userId;
     }
 
     const { invoices, total } = await InvoiceService.getAllInvoices(filter as any, limit, skip);
@@ -176,10 +176,9 @@ export const getAllInvoices = async (req: Request, res: Response) => {
  */
 export const getInvoiceById = async (req: Request, res: Response) => {
   try {
-    const invoiceId = Number(req.params.id);
-    if (isNaN(invoiceId)) return sendError(res, 400, "Invalid invoice ID");
+    const invoiceId = req.params.id;
 
-    const invoice = await InvoiceService.getInvoiceById(invoiceId);
+    const invoice = await InvoiceService.getInvoiceById(invoiceId as string);
     if (!invoice) return sendError(res, 404, "Invoice not found");
 
     // Return full objects for orders
@@ -187,7 +186,7 @@ export const getInvoiceById = async (req: Request, res: Response) => {
 
     // Authorization check for client role
     if (req.user!.role === "client") {
-      const authUserId = Number(req.user!.userId);
+      const authUserId = req.user!.userId;
       if (invoice.client_id !== authUserId) {
         return sendError(res, 403, "Forbidden");
       }
@@ -234,16 +233,15 @@ export const getInvoiceById = async (req: Request, res: Response) => {
  */
 export const recordPayment = async (req: Request, res: Response) => {
   try {
-    const invoiceId = Number(req.params.id);
-    if (isNaN(invoiceId)) return sendError(res, 400, "Invalid invoice ID");
+    const invoiceId = req.params.id;
 
     const { amount, method, transaction_reference } = req.body;
 
-    const invoice = await InvoiceService.recordPayment(invoiceId, {
+    const invoice = await InvoiceService.recordPayment(invoiceId as string, {
       amount: Number(amount),
       method,
       transaction_reference,
-    }, Number(req.user!.userId));
+    }, req.user!.userId);
 
     return sendSuccess(res, 200, "Payment recorded", invoice);
   } catch (error: any) {

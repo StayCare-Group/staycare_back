@@ -20,14 +20,14 @@ export interface RevenueMonth {
 }
 
 export interface ClientStats {
-  clientId: number;
+  clientId: string;
   clientName: string;
   totalOrders: number;
   totalRevenue: number;
 }
 
 export interface OrderSlaHistory {
-  id: number;
+  id: string;
   service_type: string;
   created_at: Date;
   status: string;

@@ -1,17 +1,18 @@
 import type { PoolConnection } from "mysql2/promise";
 import pool from "../db/pool";
-import { RowDataPacket, ResultSetHeader } from "mysql2";
+import { RowDataPacket } from "mysql2";
 import type { UserRole } from "../utils/jwt";
+import { generateEntityId, type EntityId } from "../utils/id";
 
 export interface IUserMySQL {
-  id?: number;
+  id?: EntityId;
   name: string;
   email: string;
   password_hash: string;
   phone: string | null;
   language: "en" | "es";
   role: UserRole;
-  role_id?: number;
+  role_id?: EntityId;
   is_active?: boolean;
   refresh_token?: string | null;
   created_at?: Date;
@@ -42,7 +43,7 @@ export class UserRepository {
     return (rows[0] as IUserMySQL) || null;
   }
 
-  static async findById(id: number | string): Promise<IUserMySQL | null> {
+  static async findById(id: EntityId): Promise<IUserMySQL | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `${USER_BASE_SELECT} WHERE u.id = ? LIMIT 1`,
       [id]
@@ -58,14 +59,16 @@ export class UserRepository {
       password_hash: string;
       phone: string | null;
       language?: "en" | "es" | undefined;
-      role_id: number;
+      role_id: EntityId;
       is_active?: boolean;
     }
-  ): Promise<number> {
-    const [result] = await conn.execute<ResultSetHeader>(
-      `INSERT INTO users (name, email, password_hash, phone, language, role_id, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ): Promise<EntityId> {
+    const id = generateEntityId();
+    await conn.execute(
+      `INSERT INTO users (id, name, email, password_hash, phone, language, role_id, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        id,
         user.name,
         user.email,
         user.password_hash,
@@ -75,15 +78,15 @@ export class UserRepository {
         user.is_active !== undefined ? user.is_active : true,
       ]
     );
-    return result.insertId;
+    return id;
   }
 
-  static async updateRefreshToken(userId: number | string, token: string | null): Promise<void> {
+  static async updateRefreshToken(userId: EntityId, token: string | null): Promise<void> {
     await pool.execute("UPDATE users SET refresh_token = ? WHERE id = ?", [token, userId]);
   }
 
   static async update(
-    id: number | string,
+    id: EntityId,
     data: Partial<IUserMySQL>,
     conn: PoolConnection | null = null
   ): Promise<void> {
@@ -138,7 +141,7 @@ export class UserRepository {
     return Number((rows[0] as { total: number }).total) || 0;
   }
 
-  static async deleteById(id: number | string): Promise<void> {
+  static async deleteById(id: EntityId): Promise<void> {
     await pool.execute("DELETE FROM users WHERE id = ?", [id]);
   }
 

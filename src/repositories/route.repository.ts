@@ -1,10 +1,11 @@
 import pool from "../db/pool";
 import type { RowDataPacket, ResultSetHeader, PoolConnection } from "mysql2/promise";
+import { generateEntityId, type EntityId } from "../utils/id";
 
 export interface IRouteRow extends RowDataPacket {
-  id: number;
+  id: EntityId;
   route_date: Date;
-  driver_id: number;
+  driver_id: EntityId;
   area: string;
   status: "planned" | "in_progress" | "completed";
   created_at: Date;
@@ -12,15 +13,15 @@ export interface IRouteRow extends RowDataPacket {
 }
 
 export interface IRouteOrderRow extends RowDataPacket {
-  route_id: number;
-  order_id: number;
+  route_id: EntityId;
+  order_id: EntityId;
   position: number;
 }
 
 export class RouteRepository {
   static async findAll(filter: {
     status?: string;
-    driver_id?: number;
+    driver_id?: EntityId;
     area?: string;
     date?: string;
     search?: string | undefined;
@@ -91,7 +92,7 @@ export class RouteRepository {
       );
 
       // Map orders to their routes
-      const ordersByRouteId: Record<number, any[]> = {};
+      const ordersByRouteId: Record<string, any[]> = {};
       (allOrders as any[]).forEach((ord: any) => {
         if (!ordersByRouteId[ord.route_id]) {
           ordersByRouteId[ord.route_id] = [];
@@ -114,7 +115,7 @@ export class RouteRepository {
   }
 
 
-  static async findById(id: number | string): Promise<any | null> {
+  static async findById(id: EntityId): Promise<any | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT r.*, 
               u.name as driver_name, u.email as driver_email, u.phone as driver_phone
@@ -155,20 +156,21 @@ export class RouteRepository {
 
   static async insert(conn: PoolConnection, data: {
     route_date: string;
-    driver_id: number;
+    driver_id: EntityId;
     area: string;
     status?: string;
-  }): Promise<number> {
-    const [result] = await conn.execute<ResultSetHeader>(
-      "INSERT INTO routes (route_date, driver_id, area, status) VALUES (?, ?, ?, ?)",
-      [data.route_date, data.driver_id, data.area, data.status || "planned"]
+  }): Promise<EntityId> {
+    const id = generateEntityId();
+    await conn.execute<ResultSetHeader>(
+      "INSERT INTO routes (id, route_date, driver_id, area, status) VALUES (?, ?, ?, ?, ?)",
+      [id, data.route_date, data.driver_id, data.area, data.status || "planned"]
     );
-    return result.insertId;
+    return id;
   }
 
-  static async update(id: number | string, data: Partial<{
+  static async update(id: EntityId, data: Partial<{
     route_date: string;
-    driver_id: number;
+    driver_id: EntityId;
     area: string;
     status: string;
   }>): Promise<void> {
@@ -181,19 +183,19 @@ export class RouteRepository {
     await pool.execute(`UPDATE routes SET ${setClause} WHERE id = ?`, values);
   }
 
-  static async delete(id: number | string): Promise<void> {
+  static async delete(id: EntityId): Promise<void> {
     // Note: ON DELETE CASCADE in MySQL handles route_orders cleanup
     await pool.execute("DELETE FROM routes WHERE id = ?", [id]);
   }
 
-  static async assignOrder(conn: PoolConnection, routeId: number, orderId: number, position: number): Promise<void> {
+  static async assignOrder(conn: PoolConnection, routeId: EntityId, orderId: EntityId, position: number): Promise<void> {
     await conn.execute(
       "INSERT INTO route_orders (route_id, order_id, position) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE position = ?",
       [routeId, orderId, position, position]
     );
   }
 
-  static async removeOrdersByRoute(conn: PoolConnection, routeId: number): Promise<void> {
+  static async removeOrdersByRoute(conn: PoolConnection, routeId: EntityId): Promise<void> {
     await conn.execute("DELETE FROM route_orders WHERE route_id = ?", [routeId]);
   }
 }
