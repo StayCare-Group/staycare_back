@@ -627,9 +627,16 @@ export class OrderService {
     }
   }
 
-  static async reassignOrder(orderId: string, targetDriverId: string, userId: string, role: string) {
-    if (role !== "admin") {
-      throw new Error("Only administrators can reassign orders");
+  static async reassignOrder(
+    orderId: string,
+    targetDriverId: string,
+    userId: string,
+    role: string,
+    routeDateInput?: string,
+    areaInput?: string,
+  ) {
+    if (role !== "admin" && role !== "staff") {
+      throw new Error("Only administrators and staff can reassign orders");
     }
     const conn = await pool.getConnection();
     try {
@@ -650,11 +657,12 @@ export class OrderService {
       );
 
       const pickupDate = new Date(order.pickup_date).toISOString().slice(0, 10);
-      const area = order.property_name || "General";
+      const routeDate = routeDateInput ? String(routeDateInput).slice(0, 10) : pickupDate;
+      const area = areaInput || order.property_name || "General";
 
       const [routes]: any = await conn.execute(
         "SELECT id FROM routes WHERE driver_id = ? AND route_date = ? AND status = 'planned' LIMIT 1",
-        [targetDriverId, pickupDate]
+        [targetDriverId, routeDate]
       );
 
       let routeId: string;
@@ -665,7 +673,7 @@ export class OrderService {
         routeId = generated[0].id;
         await conn.execute(
           "INSERT INTO routes (id, route_date, driver_id, area, status) VALUES (?, ?, ?, ?, 'planned')",
-          [routeId, pickupDate, targetDriverId, area]
+          [routeId, routeDate, targetDriverId, area]
         );
       }
 
@@ -674,22 +682,39 @@ export class OrderService {
         [routeId, orderId]
       );
 
-      await OrderRepository.update(orderId, {
-        status: OrderStatus.ASSIGNED,
-        driver_id: targetDriverId,
-      }, conn);
+      // Keep current status for any post-pending flow to avoid regressions (e.g. ReadyToDeliver -> Assigned).
+      // This normalization tolerates snake_case, camelCase and spacing variants.
+      const statusRaw = String(order.status || "").trim();
+      const statusCanonical = statusRaw
+        .replace(/([a-z])([A-Z])/g, "$1_$2")
+        .replace(/[\s-]+/g, "_")
+        .toLowerCase();
+
+      const shouldMoveToAssigned = statusCanonical === "pending";
+      const newStatus = shouldMoveToAssigned ? OrderStatus.ASSIGNED : order.status;
+
+      await OrderRepository.update(
+        orderId,
+        shouldMoveToAssigned
+          ? { status: newStatus, driver_id: targetDriverId }
+          : { driver_id: targetDriverId },
+        conn,
+      );
 
       await OrderRepository.insertHistory(conn, {
         order_id: orderId,
         changed_by_user_id: userId,
         is_system: false,
-        status: OrderStatus.ASSIGNED,
+        status: shouldMoveToAssigned ? OrderStatus.ASSIGNED : statusCanonical,
         note: `Reassigned to driver ${targetDriverId}`,
       });
 
       await conn.commit();
       const result = await this.getOrderById(orderId);
-      this.notifyClientOfStatus(orderId, OrderStatus.ASSIGNED);
+      // Only notify if status changed
+      if (shouldMoveToAssigned) {
+        this.notifyClientOfStatus(orderId, newStatus);
+      }
       return result;
     } catch (error) {
       await conn.rollback();

@@ -446,10 +446,14 @@ export const rescheduleOrder = async (req: Request, res: Response) => {
  * @swagger
  * /api/orders/{id}/reassign:
  *   patch:
- *     summary: Reasignar pedido a otro conductor (solo admin)
+ *     summary: Reasignar pedido a otro conductor (admin o staff)
  *     description: |
  *       Elimina la asignación anterior de ruta, busca o crea una ruta planificada para el
- *       nuevo conductor en la misma fecha y asigna el pedido. Estado → `assigned`.
+ *       nuevo conductor en la misma fecha y asigna el pedido.
+ *       - Si la orden está en estado de entrega (ready_to_delivery, collected, etc): 
+ *         Preserva el estado actual
+ *       - Si la orden está en otro estado (pending, assigned, transit, etc): 
+ *         Cambia a `assigned`
  *     tags: [Orders]
  *     security:
  *       - cookieAuth: []
@@ -457,7 +461,7 @@ export const rescheduleOrder = async (req: Request, res: Response) => {
  *       - in: path
  *         name: id
  *         required: true
- *         schema: { type: integer }
+ *         schema: { type: string }
  *     requestBody:
  *       required: true
  *       content:
@@ -467,7 +471,7 @@ export const rescheduleOrder = async (req: Request, res: Response) => {
  *             required: [driver_id]
  *             properties:
  *               driver_id:
- *                 type: integer
+ *                 type: string
  *                 description: ID del usuario conductor destino
  *     responses:
  *       200:
@@ -477,17 +481,19 @@ export const rescheduleOrder = async (req: Request, res: Response) => {
  *       401:
  *         description: No autenticado
  *       403:
- *         description: No es admin
+ *         description: No es admin o staff
  */
 export const reassignOrder = async (req: Request, res: Response) => {
   try {
-    const { driver_id } = req.body;
+    const { driver_id, route_date, area } = req.body;
     const userId = req.user!.userId;
     const order = await OrderService.reassignOrder(
       req.params.id as string,
       String(driver_id),
       userId,
-      req.user!.role
+      req.user!.role,
+      route_date,
+      area
     );
     return sendSuccess(res, 200, "Order reassigned", order);
   } catch (error: any) {

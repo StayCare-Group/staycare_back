@@ -64,7 +64,7 @@ router.patch(
 
 router.patch(
   "/:id/reassign",
-  authorize("admin"),
+  authorize("admin", "staff"),
   reassignOrder,
 );
 
