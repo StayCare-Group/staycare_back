@@ -36,6 +36,7 @@ export class InvoiceService {
       let calculatedSubtotal = 0;
       let calculatedVatAmount = 0;
       let calculatedTotal = 0;
+      const orderItemsMap = new Map<string, any[]>();
 
       // 1. Process orders (Main source of revenue)
       for (const orderId of data.order_ids) {
@@ -54,6 +55,9 @@ export class InvoiceService {
         calculatedSubtotal += Number(order.subtotal);
         calculatedVatAmount += Number(order.vat_amount);
         calculatedTotal += Number(order.total);
+
+        // Store items per order to insert as line items after invoice is created
+        orderItemsMap.set(String(orderId), items);
       }
 
       // 2. Process additional line items (Extra charges)
@@ -77,6 +81,19 @@ export class InvoiceService {
         total: calculatedTotal,
         status: "pending",
       });
+
+      // Insert order items as invoice line items
+      for (const [, items] of orderItemsMap) {
+        for (const item of items) {
+          await InvoiceRepository.insertLineItem(conn, {
+            invoice_id: invoiceId,
+            description: item.name_snapshot,
+            quantity: item.quantity,
+            unit_price: Number(item.unit_price),
+            total_price: Number(item.total_price),
+          });
+        }
+      }
 
       // Insert extra line items records
       for (const item of extraItems) {
