@@ -384,10 +384,13 @@ export const advanceOrderStatus = async (req: Request, res: Response) => {
  */
 export const deleteOrder = async (req: Request, res: Response) => {
   try {
-    await OrderService.deleteOrder(req.params.id as string);
-    return sendSuccess(res, 200, "Order deleted");
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+    const cancelledOrder = await OrderService.deleteOrder(req.params.id as string, userId, role);
+    return sendSuccess(res, 200, "Order cancelled successfully", cancelledOrder);
   } catch (error: any) {
-    return sendError(res, 400, "Order deletion failed");
+    if (error instanceof AppError) return sendError(res, error.statusCode, error.message);
+    return sendError(res, 400, error.message || "Order cancellation failed");
   }
 };
 

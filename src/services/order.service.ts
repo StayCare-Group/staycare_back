@@ -777,7 +777,72 @@ export class OrderService {
     }
   }
 
-  static async deleteOrder(id: string) {
-    await OrderRepository.delete(id);
+  static async deleteOrder(id: string, userId: string, role: string) {
+    if (role !== "admin") {
+      throw new AppError("Forbidden: Only administrators can delete or cancel orders.", 403);
+    }
+
+    const order = await OrderRepository.findById(id);
+    if (!order) {
+      throw new AppError("Order not found", 404);
+    }
+
+    if (order.is_invoiced) {
+      throw new AppError("Cannot cancel an order that has already been invoiced.", 400);
+    }
+
+    const statusRaw = String(order.status || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    if (statusRaw === OrderStatus.CANCELLED || statusRaw === "cancelled") {
+      throw new AppError("Order is already cancelled.", 400);
+    }
+
+    if (statusRaw === OrderStatus.COMPLETED || statusRaw === "completed") {
+      throw new AppError("Cannot cancel a completed order.", 400);
+    }
+
+    const ALLOWED_CANCEL_STATUSES = new Set([
+      OrderStatus.PENDING,
+      OrderStatus.ASSIGNED,
+      "pending",
+      "assigned",
+    ]);
+
+    if (!ALLOWED_CANCEL_STATUSES.has(statusRaw as any)) {
+      throw new AppError(
+        `Cannot cancel order in status '${order.status}'. Only pending or assigned orders can be cancelled by admin.`,
+        400
+      );
+    }
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      await OrderRepository.update(id, { status: OrderStatus.CANCELLED, driver_id: null }, conn);
+
+      await conn.execute("DELETE FROM route_orders WHERE order_id = ?", [id]);
+
+      await conn.execute(
+        "UPDATE machines SET current_order_id = NULL, status = 'available' WHERE current_order_id = ?",
+        [id]
+      );
+
+      await OrderRepository.insertHistory(conn, {
+        order_id: id,
+        changed_by_user_id: userId,
+        is_system: false,
+        status: OrderStatus.CANCELLED,
+        note: "Order cancelled by admin",
+      });
+
+      await conn.commit();
+      return await this.getOrderById(id);
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
   }
 }
+

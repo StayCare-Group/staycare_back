@@ -175,7 +175,7 @@ CREATE TABLE `orders` (
   `actual_bags` SMALLINT UNSIGNED NULL DEFAULT NULL,
   `staff_confirmed_bags` SMALLINT UNSIGNED NULL DEFAULT NULL,
   `special_notes` TEXT NULL DEFAULT NULL,
-  `status` ENUM('Pending', 'Assigned', 'Transit', 'Arrived', 'Washing', 'Drying', 'Ironing', 'QualityCheck', 'ReadyToDeliver', 'Collected', 'Delivered', 'Completed') NOT NULL DEFAULT 'Pending',
+  `status` ENUM('Pending', 'Assigned', 'Transit', 'Arrived', 'Washing', 'Drying', 'Ironing', 'QualityCheck', 'ReadyToDeliver', 'Collected', 'Delivered', 'Completed', 'Cancelled', 'Rescheduled') NOT NULL DEFAULT 'Pending',
   `is_invoiced` TINYINT(1) NOT NULL DEFAULT '0',
   `subtotal` DECIMAL(10,2) NOT NULL DEFAULT '0.00',
   `vat_percentage` DECIMAL(5,2) NOT NULL DEFAULT '18.00',

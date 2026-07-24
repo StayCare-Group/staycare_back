@@ -38,7 +38,7 @@ services:
       - DB_PASSWORD=123456
       - DB_NAME=staycare
     ports:
-      - "5001:5001"
+      - "5001:5000"
     volumes:
       - .:/app               # Mapear código local para sincronización
       - /app/node_modules     # Preservar node_modules del contenedor

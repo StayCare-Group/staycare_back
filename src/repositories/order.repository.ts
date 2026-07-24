@@ -21,6 +21,8 @@ function toDbOrderStatus(status: unknown): string | any {
     delivered: "Delivered",
     invoiced: "Invoiced",
     completed: "Completed",
+    cancelled: "Cancelled",
+    rescheduled: "Rescheduled",
   };
   return map[normalized] ?? status;
 }

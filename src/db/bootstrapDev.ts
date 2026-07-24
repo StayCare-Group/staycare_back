@@ -66,7 +66,14 @@ export async function autoInitDbForDevelopment(): Promise<void> {
     ) as any;
 
     if (tableCount > 0) {
-      console.log(`Development DB already initialized (${tableCount} tables found), skipping schema init.`);
+      console.log(`Development DB already initialized (${tableCount} tables found), running schema sync...`);
+      try {
+        await conn.query(
+          `ALTER TABLE ${quoteIdentifier(config.db.database)}.orders MODIFY COLUMN status ENUM('Pending', 'Assigned', 'Transit', 'Arrived', 'Washing', 'Drying', 'Ironing', 'QualityCheck', 'ReadyToDeliver', 'Collected', 'Delivered', 'Completed', 'Cancelled', 'Rescheduled') NOT NULL DEFAULT 'Pending'`
+        );
+      } catch {
+        /* ignore if column doesn't exist yet */
+      }
       return;
     }
 
