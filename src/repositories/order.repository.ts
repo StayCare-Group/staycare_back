@@ -4,6 +4,10 @@ import type { RowDataPacket } from "mysql2";
 import pool from "../db/pool";
 import { generateEntityId, type EntityId } from "../utils/id";
 
+/**
+ * Converts a snake_case OrderStatus enum value to the PascalCase string
+ * stored in the MySQL database. Used before INSERT / UPDATE queries.
+ */
 function toDbOrderStatus(status: unknown): string | any {
   if (typeof status !== "string") return status;
   const normalized = status.trim().toLowerCase();
@@ -25,6 +29,33 @@ function toDbOrderStatus(status: unknown): string | any {
     rescheduled: "Rescheduled",
   };
   return map[normalized] ?? status;
+}
+
+/**
+ * Converts a PascalCase status string read from MySQL back to the canonical
+ * snake_case value used by the OrderStatus enum and the API response.
+ * The database schema is NOT modified; normalization happens in code only.
+ */
+function fromDbOrderStatus(dbValue: string): string {
+  if (!dbValue) return dbValue;
+  const map: Record<string, string> = {
+    Pending: "pending",
+    Assigned: "assigned",
+    Transit: "transit",
+    Arrived: "arrived",
+    Washing: "washing",
+    Drying: "drying",
+    Ironing: "ironing",
+    QualityCheck: "quality_check",
+    ReadyToDeliver: "ready_to_delivery",
+    Collected: "collected",
+    Delivered: "delivered",
+    Invoiced: "invoiced",
+    Completed: "completed",
+    Cancelled: "cancelled",
+    Rescheduled: "rescheduled",
+  };
+  return map[dbValue] ?? dbValue.toLowerCase();
 }
 
 export interface IOrderMySQL {
@@ -95,7 +126,11 @@ export class OrderRepository {
     );
     if (!rows[0]) return null;
     const row = rows[0] as any;
-    return { ...row, is_invoiced: Boolean(row.is_invoiced) } as IOrderMySQL;
+    return {
+      ...row,
+      is_invoiced: Boolean(row.is_invoiced),
+      status: fromDbOrderStatus(row.status),
+    } as IOrderMySQL;
   }
 
   static async findItemsByOrderId(orderId: EntityId): Promise<IOrderItemMySQL[]> {
@@ -111,7 +146,10 @@ export class OrderRepository {
       `SELECT * FROM order_status_history WHERE order_id = ? ORDER BY changed_at ASC`,
       [orderId]
     );
-    return rows as IOrderStatusHistoryMySQL[];
+    return (rows as any[]).map((r) => ({
+      ...r,
+      status: fromDbOrderStatus(r.status),
+    })) as IOrderStatusHistoryMySQL[];
   }
 
   static async insert(conn: PoolConnection, data: Omit<IOrderMySQL, "id" | "created_at" | "updated_at">): Promise<EntityId> {
@@ -212,10 +250,10 @@ export class OrderRepository {
       if (Array.isArray(filter.status)) {
         const placeholders = filter.status.map(() => "?").join(", ");
         where += ` AND o.status IN (${placeholders})`;
-        params.push(...filter.status);
+        params.push(...filter.status.map(toDbOrderStatus));
       } else {
         where += " AND o.status = ?";
-        params.push(filter.status);
+        params.push(toDbOrderStatus(filter.status));
       }
     }
     if (filter.is_invoiced !== undefined) {
@@ -274,10 +312,10 @@ export class OrderRepository {
       if (Array.isArray(filter.status)) {
         const placeholders = filter.status.map(() => "?").join(", ");
         where += ` AND o.status IN (${placeholders})`;
-        params.push(...filter.status);
+        params.push(...filter.status.map(toDbOrderStatus));
       } else {
         where += " AND o.status = ?";
-        params.push(filter.status);
+        params.push(toDbOrderStatus(filter.status));
       }
     }
     if (filter.is_invoiced !== undefined) {
@@ -340,7 +378,8 @@ export class OrderRepository {
 
     return rows.map((r: any) => ({
       ...r,
-      is_invoiced: Boolean(r.is_invoiced)
+      is_invoiced: Boolean(r.is_invoiced),
+      status: fromDbOrderStatus(r.status),
     }));
   }
 
