@@ -10,6 +10,33 @@ import { InvoiceService } from "./invoice.service";
 
 const EXPRESS_SURCHARGE = 25.0;
 
+function toDateString(val: string | Date | null | undefined): string {
+  if (!val) return "";
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const d = new Date(trimmed);
+    if (isNaN(d.getTime())) return "";
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return "";
+    return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, "0")}-${String(val.getDate()).padStart(2, "0")}`;
+  }
+  return "";
+}
+
+function getTodayString(): string {
+  return toDateString(new Date());
+}
+
+function isDateInPast(val: string | Date): boolean {
+  const target = toDateString(val);
+  const today = getTodayString();
+  if (!target || !today) return false;
+  return target < today;
+}
+
 export class OrderService {
   private static async notifyClientOfStatus(orderId: string, newStatus: OrderStatus): Promise<void> {
     const NOTIFY_STATUSES = new Set([
@@ -104,6 +131,10 @@ export class OrderService {
   }
 
   static async createOrder(data: any, userId: string, role: string) {
+    if (data.pickup_date && isDateInPast(data.pickup_date)) {
+      throw new AppError("The pickup date cannot be in the past.", 400);
+    }
+
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -290,6 +321,11 @@ export class OrderService {
       const updateData: any = { ...rest };
 
       if (data.pickup_date) {
+        const origDateStr = toDateString(order.pickup_date);
+        const newDateStr = toDateString(data.pickup_date);
+        if (newDateStr !== origDateStr && isDateInPast(data.pickup_date)) {
+          throw new AppError("The pickup date cannot be in the past.", 400);
+        }
         updateData.pickup_date = new Date(data.pickup_date);
       }
 
@@ -589,6 +625,10 @@ export class OrderService {
   }
 
   static async rescheduleOrder(orderId: string, data: any, userId: string) {
+    if (data.pickup_date && isDateInPast(data.pickup_date)) {
+      throw new AppError("The pickup date cannot be in the past.", 400);
+    }
+
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
