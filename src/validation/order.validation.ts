@@ -4,7 +4,7 @@ import { uuidIdSchema } from "./id.validation";
 
 const orderItemSchema = z.object({
   item_id: uuidIdSchema,
-  quantity: z.number().int().positive(),
+  quantity: z.number().int().positive().optional(),
   // Optional snapshots if sent, but will be overwritten by backend
   item_code: z.string().optional(),
   name: z.string().optional(),
