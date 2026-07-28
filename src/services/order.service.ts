@@ -624,9 +624,18 @@ export class OrderService {
     }
   }
 
-  static async rescheduleOrder(orderId: string, data: any, userId: string) {
+  static async rescheduleOrder(orderId: string, data: any, userId: string, role?: string) {
     if (data.pickup_date && isDateInPast(data.pickup_date)) {
       throw new AppError("The pickup date cannot be in the past.", 400);
+    }
+
+    const order = await OrderRepository.findById(orderId);
+    if (!order) {
+      throw new AppError("Order not found", 404);
+    }
+
+    if (role === "client" && String(order.client_id) !== String(userId)) {
+      throw new AppError("Forbidden: You do not have permission to reschedule this order.", 403);
     }
 
     const conn = await pool.getConnection();
@@ -639,8 +648,7 @@ export class OrderService {
         pickup_window_end: new Date(data.pickup_window.end_time),
       };
 
-      const order = await OrderRepository.findById(orderId);
-      if (order?.status === OrderStatus.ASSIGNED) {
+      if (order.status === OrderStatus.ASSIGNED) {
         updateData.status = OrderStatus.PENDING;
         updateData.driver_id = null;
         await conn.execute("DELETE FROM route_orders WHERE order_id = ?", [orderId]);

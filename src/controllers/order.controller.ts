@@ -134,9 +134,15 @@ export const createOrder = async (req: Request, res: Response) => {
  */
 export const getAllOrders = async (req: Request, res: Response) => {
   try {
-    const { status, client_id, service_type, from, to, pickup_from, pickup_to, search } = req.query;
+    const { status, client_id, client, service_type, from, to, pickup_from, pickup_to, search } = req.query;
     const { page, limit, skip } = parsePagination(req);
-    const filter: any = { status, client_id, service_type, from, to, pickup_from, pickup_to, search };
+    const resolvedClientId = (client_id || client) as string | undefined;
+    const filter: any = { status, client_id: resolvedClientId, service_type, from, to, pickup_from, pickup_to, search };
+
+    // If client role, restrict client_id to the authenticated user's ID
+    if (req.user!.role === "client") {
+      filter.client_id = req.user!.userId;
+    }
 
     // 1. Admin: Si busca pendientes de asignación, eliminamos restricción de fecha por defecto
     if (req.user!.role === "admin" && status === OrderStatus.PENDING) {
@@ -217,8 +223,19 @@ export const getOrderById = async (req: Request, res: Response) => {
   try {
     const orderId = req.params.id;
     const order = await OrderService.getOrderById(orderId as string);
+    if (!order) {
+      return sendError(res, 404, "Order not found");
+    }
+
+    if (req.user!.role === "client" && String(order.client_id) !== String(req.user!.userId)) {
+      return sendError(res, 403, "Forbidden");
+    }
+
     return sendSuccess(res, 200, "Order retrieved", order);
   } catch (error: any) {
+    if (error instanceof AppError) {
+      return sendError(res, error.statusCode, error.message);
+    }
     return sendError(res, 400, "Failed to fetch order");
   }
 };
@@ -438,10 +455,14 @@ export const deleteOrder = async (req: Request, res: Response) => {
 export const rescheduleOrder = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const order = await OrderService.rescheduleOrder(req.params.id as string, req.body, userId);
+    const role = req.user!.role;
+    const order = await OrderService.rescheduleOrder(req.params.id as string, req.body, userId, role);
     return sendSuccess(res, 200, "Order rescheduled", order);
   } catch (error: any) {
-    return sendError(res, 400, "Reschedule failed");
+    if (error instanceof AppError) {
+      return sendError(res, error.statusCode, error.message);
+    }
+    return sendError(res, 400, error.message || "Reschedule failed");
   }
 };
 

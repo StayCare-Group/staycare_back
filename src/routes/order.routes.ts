@@ -41,7 +41,7 @@ router.post(
 // ─── Update (structural data) ─────────────────────────────────────────────────
 router.put(
   "/:id",
-  authorize("admin", "staff"),
+  authorize("admin", "staff", "operator"),
   validate(updateOrderSchema),
   updateOrder,
 );
