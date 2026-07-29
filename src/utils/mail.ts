@@ -27,13 +27,19 @@ export async function sendInvitationEmail(
   role: string,
   inviteUrl: string,
 ) {
+  if (!isMailConfigured()) {
+    console.warn(`SMTP credentials not configured. Skipping invitation email sending to ${to}. Invitation link: ${inviteUrl}`);
+    throw new Error("SMTP credentials not configured");
+  }
+
   const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
 
-  await getTransporter().sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
-    to,
-    subject: `You've been invited to StayCare as ${roleLabel}`,
-    html: `
+  try {
+    await getTransporter().sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to,
+      subject: `You've been invited to StayCare as ${roleLabel}`,
+      html: `
 <div style="margin:0;padding:0;background:#f3f4f5;">
   <div style="max-width:520px;margin:0 auto;padding:40px 24px;font-family:Inter, Arial, sans-serif;color:#191c1d;">
     
@@ -79,7 +85,11 @@ export async function sendInvitationEmail(
   </div>
 </div>
 `
-  });
+    });
+  } catch (error) {
+    console.error(`Failed to send invitation email to ${to}:`, error);
+    throw error;
+  }
 }
 
 const STATUS_LABELS: Record<string, string> = {

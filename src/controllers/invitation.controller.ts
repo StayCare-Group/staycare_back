@@ -79,11 +79,15 @@ export const createInvitation = async (req: Request, res: Response) => {
 
     const result = await InvitationService.createInvitation(email, role, createdByUserId);
 
-    const message = result.emailSent
-      ? "Invitation sent"
-      : "Invitation created but email failed to send. Share the link manually.";
+    const message = result.isRenewal
+      ? "Invitation renewed. Email sending is processing in background."
+      : "Invitation generated. Email sending is processing in background.";
 
-    return sendSuccess(res, 201, message, { invitation: result.invitation });
+    return sendSuccess(res, 201, message, {
+      invitation: result.invitation,
+      isRenewal: result.isRenewal,
+      emailSent: true,
+    });
   } catch (error: any) {
     const status = error.statusCode ?? error.status ?? 400;
     return sendError(res, status, error.message || "Failed to create invitation");

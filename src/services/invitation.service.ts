@@ -30,14 +30,12 @@ export class InvitationService {
     // Check if user already exists
     const existing = await UserRepository.findByEmail(email);
     if (existing) {
-      throw new AppError("El correo electrónico ya está registrado en el sistema", 409);
+      throw new AppError("Email is already registered in the system", 409);
     }
 
-    // Check for pending and not expired invitations
+    // Check if an active pending invitation currently exists for renewal tracking
     const pendingInvites = await InvitationRepository.findPendingByEmail(email);
-    if (pendingInvites.length > 0) {
-      throw new AppError("Ya existe una invitación pendiente y activa para este correo electrónico", 400);
-    }
+    const isRenewal = pendingInvites.length > 0;
 
     const conn = await pool.getConnection();
     try {
@@ -60,22 +58,22 @@ export class InvitationService {
       await conn.commit();
 
       const inviteUrl = `${clientUrl()}/invite/${token}`;
-      let emailSent = true;
 
-      try {
-        await sendInvitationEmail(email, role, inviteUrl);
-      } catch {
-        emailSent = false;
-      }
+      // Dispatch email asynchronously so HTTP response is non-blocking and instant (Option 1)
+      sendInvitationEmail(email, role, inviteUrl).catch((err) => {
+        console.error(`Background error sending invitation email to ${email}:`, err);
+      });
 
       return {
-        emailSent,
+        isRenewal,
+        emailSent: true,
         invitation: {
           id,
+          token,
           email,
           role,
           expires_at: expiresAt,
-          invite_url: emailSent ? undefined : inviteUrl,
+          invite_url: inviteUrl,
         },
       };
     } catch (error) {
@@ -129,7 +127,7 @@ export class InvitationService {
 
     const existingUser = await UserRepository.findByEmail(invitation.email);
     if (existingUser) {
-      throw new AppError("El correo electrónico ya está registrado en el sistema", 409);
+      throw new AppError("Email is already registered in the system", 409);
     }
 
     const roleId = await RoleRepository.getIdByName(invitation.role as any);
@@ -152,7 +150,7 @@ export class InvitationService {
 
       if (invitation.role === "client") {
         if (!data.client_profile) {
-          throw new AppError("Los datos del perfil de cliente son obligatorios", 400);
+          throw new AppError("Client profile details are required", 400);
         }
         await ClientProfileRepository.insert(conn, {
           user_id: userId,
