@@ -139,6 +139,10 @@ export const getAllOrders = async (req: Request, res: Response) => {
     const resolvedClientId = (client_id || client) as string | undefined;
     const filter: any = { status, client_id: resolvedClientId, service_type, from, to, pickup_from, pickup_to, search };
 
+    if (typeof status === "string" && status.includes(",")) {
+      filter.status = status.split(",").map((s) => s.trim());
+    }
+
     // If client role, restrict client_id to the authenticated user's ID
     if (req.user!.role === "client") {
       filter.client_id = req.user!.userId;

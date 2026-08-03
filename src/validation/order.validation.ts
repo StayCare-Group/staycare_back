@@ -74,17 +74,17 @@ export const advanceStatusSchema = z.object({
     status: z.nativeEnum(OrderStatus),
     // Pickup (transit)
     actual_bags: z.number().int().positive().optional(),
+    packages_delivered: z.number().int().positive().optional(),
+    received_by: z.string().optional(),
     // Photos (transit / delivered)
     photos: z
       .array(z.object({ url: z.string().url() }))
       .optional(),
-    // Notes generales / driver pickup
-    notes: z.string().optional(),
-    // Staff — recepción en facility
-    internal_notes: z.string().optional(),
+    // Notas unificadas de la orden
+    special_notes: z.string().optional(),
     staff_confirmed_bags: z.number().int().positive().optional(),
     items: z.array(orderItemSchema).optional(),
-    // Historia genérica
+    // Historia de auditoría genérica
     note: z.string().optional(),
   }),
   params: z.object({ id: uuidIdSchema }),

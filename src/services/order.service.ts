@@ -37,6 +37,15 @@ function isDateInPast(val: string | Date): boolean {
   return target < today;
 }
 
+function appendNote(existingNote: string | null | undefined, newText: string | null | undefined, authorLabel: string): string | null {
+  if (!newText || !newText.trim()) return existingNote || null;
+  const trimmedNew = newText.trim();
+  const formattedNew = trimmedNew.startsWith("[") ? trimmedNew : `[${authorLabel}]: ${trimmedNew}`;
+  if (!existingNote || !existingNote.trim()) return formattedNew;
+  if (existingNote.includes(formattedNew)) return existingNote;
+  return `${existingNote.trim()}\n${formattedNew}`;
+}
+
 export class OrderService {
   private static async notifyClientOfStatus(orderId: string, newStatus: OrderStatus): Promise<void> {
     const NOTIFY_STATUSES = new Set([
@@ -163,6 +172,8 @@ export class OrderService {
         calculatedItems
       } = await this.calculateTotals(data.items || [], data.service_type || "standard");
 
+      const initialNotes = appendNote(null, data.special_notes, "pending");
+
       const orderData: Omit<IOrderMySQL, "id" | "created_at" | "updated_at"> = {
         order_number: orderNumber,
         client_id: clientId,
@@ -175,7 +186,7 @@ export class OrderService {
         estimated_bags: data.estimated_bags || null,
         actual_bags: null,
         staff_confirmed_bags: null,
-        special_notes: data.special_notes || null,
+        special_notes: initialNotes,
         status: OrderStatus.PENDING,
         is_invoiced: false,
         subtotal,
@@ -226,6 +237,7 @@ export class OrderService {
     userId: string, 
     data: { 
       staff_confirmed_bags: number; 
+      special_notes?: string;
       items: { item_id: string; quantity: number; qty_good: number; qty_bad: number; qty_stained: number }[] 
     }
   ) {
@@ -276,6 +288,9 @@ export class OrderService {
         });
       }
 
+      const incomingNote = data.special_notes;
+      const updatedNotes = appendNote(order.special_notes, incomingNote, "arrived");
+
       // 3. Update order status, confirmed bags, and financials
       await OrderRepository.update(orderId, {
         status: OrderStatus.ARRIVED,
@@ -283,6 +298,7 @@ export class OrderService {
         subtotal,
         vat_amount: vatAmount,
         total,
+        ...(updatedNotes ? { special_notes: updatedNotes } : {}),
       }, conn);
 
       // 4. Record history
@@ -377,7 +393,7 @@ export class OrderService {
     }
   }
 
-  static async updateStatus(orderId: string, status: OrderStatus, userId: string, role: string, note?: string) {
+  static async updateStatus(orderId: string, status: OrderStatus, userId: string, role: string, note?: string, specialNotes?: string) {
     const order = await OrderRepository.findById(orderId);
     if (!order) throw new AppError("Order not found", 404);
 
@@ -402,7 +418,16 @@ export class OrderService {
     try {
       await conn.beginTransaction();
 
-      await OrderRepository.update(orderId, { status }, conn);
+      const updateData: Partial<IOrderMySQL> = { status };
+      if (specialNotes && specialNotes.trim()) {
+        const stageTag = status === OrderStatus.READY_TO_DELIVERY ? "quality_check" : status.toLowerCase();
+        const updatedNotes = appendNote(order.special_notes, specialNotes, stageTag);
+        if (updatedNotes !== (order.special_notes ?? null)) {
+          updateData.special_notes = updatedNotes;
+        }
+      }
+
+      await OrderRepository.update(orderId, updateData, conn);
       await OrderRepository.insertHistory(conn, {
         order_id: orderId,
         changed_by_user_id: userId,
@@ -439,14 +464,18 @@ export class OrderService {
     try {
       await conn.beginTransaction();
 
+      const order = await OrderRepository.findById(orderId);
+      const incomingNote = data.special_notes;
+      const updatedNotes = appendNote(order?.special_notes, incomingNote, "transit");
+
       const updateData: Partial<IOrderMySQL> = {
         actual_bags: data.actual_bags,
         status: OrderStatus.TRANSIT,
         driver_id: userId,
       };
-      
-      if (data.notes) {
-        updateData.special_notes = data.notes;
+
+      if (updatedNotes !== (order?.special_notes ?? null)) {
+        updateData.special_notes = updatedNotes;
       }
 
       await OrderRepository.update(orderId, updateData, conn);
@@ -489,6 +518,7 @@ export class OrderService {
     if (data.items && Array.isArray(data.items)) {
       return this.receiveInPlant(orderId, userId, {
         staff_confirmed_bags: data.staff_confirmed_bags || data.actual_bags || 1,
+        special_notes: data.special_notes,
         items: data.items,
       });
     }
@@ -497,13 +527,16 @@ export class OrderService {
     try {
       await conn.beginTransaction();
 
+      const order = await OrderRepository.findById(orderId);
+      const incomingNote = data.special_notes;
+      const updatedNotes = appendNote(order?.special_notes, incomingNote, "arrived");
+
       const updateData: Partial<IOrderMySQL> = {
         status: OrderStatus.ARRIVED,
       };
 
-      if (data.internal_notes) {
-        const order = await OrderRepository.findById(orderId);
-        updateData.special_notes = [order?.special_notes, data.internal_notes].filter(Boolean).join(" | ");
+      if (updatedNotes !== (order?.special_notes ?? null)) {
+        updateData.special_notes = updatedNotes;
       }
 
       await OrderRepository.update(orderId, updateData, conn);
@@ -587,6 +620,15 @@ export class OrderService {
     try {
       await conn.beginTransaction();
 
+      const incomingDeliveryNote = data.special_notes;
+      if (incomingDeliveryNote) {
+        const order = await OrderRepository.findById(orderId);
+        const updatedNotes = appendNote(order?.special_notes, incomingDeliveryNote, "delivered");
+        if (updatedNotes !== (order?.special_notes ?? null)) {
+          await OrderRepository.update(orderId, { special_notes: updatedNotes }, conn);
+        }
+      }
+
       await OrderRepository.update(orderId, { status: OrderStatus.DELIVERED }, conn);
 
       if (data.photos && Array.isArray(data.photos)) {
@@ -598,12 +640,15 @@ export class OrderService {
         }
       }
 
+      const receivedByStr = data.received_by ? ` (Recibido por: ${data.received_by})` : "";
+      const pkgStr = data.packages_delivered ? ` - ${data.packages_delivered} paquete(s)` : "";
+
       await OrderRepository.insertHistory(conn, {
         order_id: orderId,
         changed_by_user_id: userId,
         is_system: false,
         status: OrderStatus.DELIVERED,
-        note: "Delivery confirmed",
+        note: `Delivery confirmed${pkgStr}${receivedByStr}`,
       });
 
       await conn.commit();
@@ -797,10 +842,10 @@ export class OrderService {
       actual_bags?: number;
       photos?: { url: string }[];
       internal_notes?: string;
+      special_notes?: string;
       staff_confirmed_bags?: number;
       items?: any[];
       note?: string;
-      notes?: string;
     },
     userId: string,
     role: string
@@ -818,10 +863,10 @@ export class OrderService {
       case OrderStatus.DELIVERED:
         return this.confirmDelivery(orderId, payload, userId, role);
 
-    default:
+      default:
         // Covers: pending, washing, drying, ironing, quality_check,
         //         ready_to_delivery, assigned, cancelled, completed
-        return this.updateStatus(orderId, status, userId, role, payload.note ?? payload.notes);
+        return this.updateStatus(orderId, status, userId, role, payload.note, payload.special_notes);
     }
   }
 
