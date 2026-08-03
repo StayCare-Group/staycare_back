@@ -18,13 +18,12 @@ const refreshTokenSecret = process.env.JWT_REFRESH_SECRET as string;
 // jsonwebtoken `expiresIn` expects seconds, not milliseconds.
 const accessTokenExpiresIn: number = process.env.ACCESS_TOKEN_EXPIRES
   ? parseInt(process.env.ACCESS_TOKEN_EXPIRES, 10)
-  : 15 * 60; // 15 minutes
+  : 2 * 60 * 60; // 2 hours
 
 const refreshTokenExpiresIn: number = process.env.REFRESH_TOKEN_EXPIRES
   ? parseInt(process.env.REFRESH_TOKEN_EXPIRES, 10)
   : 7 * 24 * 60 * 60; // 7 days
 
-const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 if (!accessTokenSecret || !refreshTokenSecret) {
@@ -62,7 +61,7 @@ const baseCookieOptions: CookieOptions = {
 
 export const getAccessTokenCookieOptions = (): CookieOptions => ({
   ...baseCookieOptions,
-  maxAge: FIFTEEN_MINUTES_MS,
+  maxAge: accessTokenExpiresIn * 1000,
 });
 
 export const getRefreshTokenCookieOptions = (): CookieOptions => ({
