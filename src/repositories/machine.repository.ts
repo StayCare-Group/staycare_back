@@ -100,16 +100,25 @@ export class MachineRepository {
     return Number((rows[0] as { total: number }).total) || 0;
   }
 
+  static async findByOrderId(orderId: EntityId): Promise<IMachineMySQL | null> {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT * FROM machines WHERE current_order_id = ? LIMIT 1`,
+      [orderId]
+    );
+    return (rows[0] as IMachineMySQL) || null;
+  }
+
   // ─── Insert ────────────────────────────────────────────────────────────────
 
   static async insert(
     conn: PoolConnection,
-    data: { name: string; type: MachineType; capacity: number }
+    data: { name: string; type: MachineType; capacity: number; status?: MachineStatus }
   ): Promise<EntityId> {
     const id = generateEntityId();
+    const status = data.status || "available";
     await conn.execute(
-      `INSERT INTO machines (id, name, type, capacity) VALUES (?, ?, ?, ?)`,
-      [id, data.name, data.type, data.capacity]
+      `INSERT INTO machines (id, name, type, capacity, status) VALUES (?, ?, ?, ?, ?)`,
+      [id, data.name, data.type, data.capacity, status]
     );
     return id;
   }

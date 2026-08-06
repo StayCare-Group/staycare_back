@@ -16,10 +16,16 @@ export class MachineService {
     return { machines, total };
   }
 
-  static async createMachine(data: { name: string; type: MachineType; capacity: number }) {
+  static async createMachine(data: { name: string; type: MachineType; capacity: number | string; status?: MachineStatus }) {
     const conn = await pool.getConnection();
     try {
-      const id = await MachineRepository.insert(conn, data);
+      const parsedCapacity = typeof data.capacity === "number" ? data.capacity : parseFloat(String(data.capacity).replace(/[^0-9.]/g, "")) || 0;
+      const id = await MachineRepository.insert(conn, {
+        name: data.name,
+        type: data.type,
+        capacity: parsedCapacity,
+        status: data.status || "available",
+      });
       return MachineRepository.findById(id);
     } finally {
       conn.release();
@@ -28,12 +34,23 @@ export class MachineService {
 
   static async updateMachine(
     id: EntityId,
-    data: Partial<{ name: string; type: MachineType; capacity: number; status: "available" | "running" | "maintenance" }>
+    data: Partial<{ name: string; type: MachineType; capacity: number | string; status: MachineStatus }>
   ) {
     const machine = await MachineRepository.findById(id);
     if (!machine) throw Object.assign(new Error("Machine not found"), { status: 404 });
 
-    await MachineRepository.update(id, data);
+    const updatePayload: any = { ...data };
+    if (data.capacity !== undefined) {
+      updatePayload.capacity = typeof data.capacity === "number" ? data.capacity : parseFloat(String(data.capacity).replace(/[^0-9.]/g, "")) || 0;
+    }
+
+    // If status is changed away from 'running', clear assigned order reference
+    if (data.status && data.status !== "running" && machine.status === "running") {
+      updatePayload.current_order_id = null;
+      updatePayload.started_at = null;
+    }
+
+    await MachineRepository.update(id, updatePayload);
     return MachineRepository.findById(id);
   }
 
@@ -59,6 +76,12 @@ export class MachineService {
     // Verify order exists
     const order = await OrderRepository.findById(orderId);
     if (!order) throw Object.assign(new Error("Order not found"), { status: 404 });
+
+    // If order is currently assigned to another machine, release that machine first
+    const existingAssignedMachine = await MachineRepository.findByOrderId(orderId);
+    if (existingAssignedMachine && existingAssignedMachine.id !== id) {
+      await MachineRepository.release(existingAssignedMachine.id);
+    }
 
     await MachineRepository.assign(id, orderId);
     return MachineRepository.findById(id);

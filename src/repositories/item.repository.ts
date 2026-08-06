@@ -44,7 +44,7 @@ export class ItemRepository {
       query += ` WHERE ${whereClauses.join(" AND ")}`;
     }
 
-    query += " ORDER BY item_code ASC";
+    query += " ORDER BY name ASC";
 
     if (limit !== undefined && offset !== undefined) {
       query += " LIMIT ? OFFSET ?";
