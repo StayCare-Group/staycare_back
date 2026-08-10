@@ -26,6 +26,7 @@ export const getDashboardStats = async (_req: Request, res: Response) => {
     const stats = await ReportService.getDashboardStats();
     return sendSuccess(res, 200, "Dashboard stats", stats);
   } catch (error) {
+    console.error("getDashboardStats error:", error);
     return sendError(res, 500, "Failed to fetch dashboard stats");
   }
 };
@@ -45,13 +46,14 @@ export const getDashboardStats = async (_req: Request, res: Response) => {
  *     responses:
  *       200:
  *         description: Lista de ingresos por mes
- */
+   */
 export const getRevenueByMonth = async (req: Request, res: Response) => {
   try {
     const months = parseInt(req.query.months as string) || 12;
     const data = await ReportService.getRevenueByMonth(months);
     return sendSuccess(res, 200, "Revenue by month", data);
   } catch (error) {
+    console.error("getRevenueByMonth error:", error);
     return sendError(res, 500, "Failed to fetch revenue data");
   }
 };
@@ -73,6 +75,7 @@ export const getOrdersByClient = async (_req: Request, res: Response) => {
     const data = await ReportService.getOrdersByClient();
     return sendSuccess(res, 200, "Orders by client", data);
   } catch (error) {
+    console.error("getOrdersByClient error:", error);
     return sendError(res, 500, "Failed to fetch orders by client");
   }
 };
@@ -95,6 +98,7 @@ export const getSlaMetrics = async (_req: Request, res: Response) => {
     const metrics = await ReportService.getSlaMetrics();
     return sendSuccess(res, 200, "SLA metrics", metrics);
   } catch (error) {
+    console.error("getSlaMetrics error:", error);
     return sendError(res, 500, "Failed to fetch SLA metrics");
   }
 };

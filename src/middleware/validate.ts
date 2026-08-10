@@ -23,7 +23,7 @@ export const validate =
       if (error instanceof z.ZodError) {
         return res.status(400).json({
           success: false,
-          message: "Validation failed",
+          message: "Validation failed. Please complete all required fields.",
           data: error.issues,
         });
       }

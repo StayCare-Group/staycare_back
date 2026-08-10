@@ -45,8 +45,8 @@ export class ReportRepository {
       "SELECT COUNT(*) as total FROM orders"
     );
     const [todayCount] = await pool.execute<RowDataPacket[]>(
-      "SELECT COUNT(*) as total FROM orders WHERE DATE(created_at) = ?",
-      [today]
+      "SELECT COUNT(*) as total FROM orders WHERE DATE(created_at) = ? OR pickup_date = ?",
+      [today, today]
     );
     const [activeCount] = await pool.execute<RowDataPacket[]>(
       "SELECT COUNT(*) as total FROM orders WHERE status NOT IN ('Delivered', 'Completed')"
@@ -106,7 +106,8 @@ export class ReportRepository {
   }
 
   static async getTopClients(limit: number): Promise<ClientStats[]> {
-    const [rows] = await pool.execute<RowDataPacket[]>(
+    const safeLimit = Math.max(1, Number(limit) || 20);
+    const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT
         u.id as clientId,
         u.name as clientName,
@@ -119,7 +120,7 @@ export class ReportRepository {
       GROUP BY u.id, u.name
       ORDER BY totalRevenue DESC
       LIMIT ?`,
-      [limit]
+      [safeLimit]
     );
 
     return rows.map((r) => ({
