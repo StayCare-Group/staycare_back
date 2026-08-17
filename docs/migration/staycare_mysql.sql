@@ -78,7 +78,6 @@ CREATE TABLE `client_profiles` (
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_client_profiles_user` (`user_id`),
-  UNIQUE KEY `uq_client_profiles_vat` (`vat_number`),
   CONSTRAINT `fk_client_profiles_user`
     FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
     ON DELETE CASCADE ON UPDATE CASCADE

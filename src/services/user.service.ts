@@ -191,11 +191,18 @@ export class UserService {
     try {
       await UserRepository.update(rawId, updateData);
 
-      // Si es un cliente y viene información de perfil, actualizarla
+      // Si es un cliente y viene información de perfil, actualizarla (upsert)
       if (existing.role === "client" && profileToUpdate) {
         const currentProfile = await ClientProfileRepository.findByUserId(rawId);
         if (currentProfile?.id) {
           await ClientProfileRepository.update(currentProfile.id, profileToUpdate);
+        } else {
+          await ClientProfileRepository.create({
+            user_id: rawId,
+            contact_person: profileToUpdate.contact_person ?? "",
+            vat_number: profileToUpdate.vat_number ?? "",
+            billing_address: profileToUpdate.billing_address ?? "",
+          });
         }
       }
 

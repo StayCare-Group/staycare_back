@@ -169,4 +169,30 @@ export class ClientProfileRepository {
     );
     return id;
   }
+
+  static async create(row: {
+    user_id: EntityId;
+    contact_person: string;
+    vat_number: string;
+    billing_address: string;
+    credits_terms_days?: number;
+    pricing_tier?: PricingTier;
+  }): Promise<EntityId> {
+    const id = generateEntityId();
+    await pool.execute(
+      `INSERT INTO client_profiles
+        (id, user_id, contact_person, vat_number, billing_address, credits_terms_days, pricing_tier)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        row.user_id,
+        row.contact_person,
+        row.vat_number,
+        row.billing_address,
+        row.credits_terms_days ?? 30,
+        row.pricing_tier ?? "standard",
+      ]
+    );
+    return id;
+  }
 }

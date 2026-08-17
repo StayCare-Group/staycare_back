@@ -95,6 +95,9 @@ export class OrderService {
       if (!itemDef) {
         throw new Error(`Item with ID ${item.item_id} not found.`);
       }
+      if (item.quantity > 0 && (itemDef.is_active as any) === 0) {
+        throw new AppError(`Item '${itemDef.name}' (${itemDef.item_code}) is inactive and cannot be added to a new order.`, 400);
+      }
       const unitPrice = itemDef.base_price;
       const totalPrice = unitPrice * item.quantity;
       subtotal += totalPrice;

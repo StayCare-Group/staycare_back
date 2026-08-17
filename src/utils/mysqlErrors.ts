@@ -12,8 +12,5 @@ export function duplicateEntryMessage(err: unknown): string | null {
   if (msg.includes("phone") || msg.includes("uq_users_phone")) {
     return "Phone already in use";
   }
-  if (msg.includes("vat") || msg.includes("uq_client_profiles_vat")) {
-    return "VAT number already in use";
-  }
   return "Duplicate entry";
 }

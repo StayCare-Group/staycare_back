@@ -97,6 +97,13 @@ export class UserRegistrationService {
           };
           await PropertyRepository.insert(conn, row);
         }
+      } else {
+        await ClientProfileRepository.insert(conn, {
+          user_id: uid,
+          contact_person: "",
+          vat_number: "",
+          billing_address: "",
+        });
       }
       return uid;
     });

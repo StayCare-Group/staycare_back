@@ -94,23 +94,38 @@ export class AuthService {
 
   static async updateMe(
     userId: EntityId,
-    data: Partial<IUserMySQL> & { contact_person?: string; billing_address?: string }
+    data: Partial<IUserMySQL> & { contact_person?: string; billing_address?: string; vat_number?: string }
   ): Promise<IUserMySQL> {
     await UserRepository.update(userId, data);
 
-    const hasProfilePatch = data.contact_person !== undefined || data.billing_address !== undefined;
-    if (hasProfilePatch) {
-      const profile = await ClientProfileRepository.findByUserId(userId);
-      if (profile?.id) {
-        await ClientProfileRepository.update(profile.id, {
-          ...(data.contact_person !== undefined ? { contact_person: data.contact_person } : {}),
-          ...(data.billing_address !== undefined ? { billing_address: data.billing_address } : {}),
-        });
+    const user = await UserRepository.findById(userId);
+    if (!user) throw new AppError("User not found", 404);
+
+    if (user.role === "client") {
+      const hasProfilePatch =
+        data.contact_person !== undefined ||
+        data.billing_address !== undefined ||
+        data.vat_number !== undefined;
+
+      if (hasProfilePatch) {
+        const profile = await ClientProfileRepository.findByUserId(userId);
+        if (profile?.id) {
+          await ClientProfileRepository.update(profile.id, {
+            ...(data.contact_person !== undefined ? { contact_person: data.contact_person } : {}),
+            ...(data.billing_address !== undefined ? { billing_address: data.billing_address } : {}),
+            ...(data.vat_number !== undefined ? { vat_number: data.vat_number } : {}),
+          });
+        } else {
+          await ClientProfileRepository.create({
+            user_id: userId,
+            contact_person: data.contact_person ?? "",
+            vat_number: data.vat_number ?? "",
+            billing_address: data.billing_address ?? "",
+          });
+        }
       }
     }
 
-    const user = await UserRepository.findById(userId);
-    if (!user) throw new AppError("User not found", 404);
     return user;
   }
 
