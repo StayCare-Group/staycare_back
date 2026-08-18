@@ -73,6 +73,9 @@ export class AuthService {
     if (!isMatch) {
       throw new AppError("Invalid credentials", 401);
     }
+    if (!user.is_active) {
+      throw new AppError("Account is deactivated", 403);
+    }
 
     const tokens = generateAuthTokens(user.id!, toTokenRole(user.role!));
     await UserRepository.updateRefreshToken(user.id!, tokens.refreshToken);
@@ -85,10 +88,13 @@ export class AuthService {
     if (!user) {
       throw new AppError("Invalid or expired refresh token", 401);
     }
+    if (!user.is_active) {
+      throw new AppError("Account is deactivated", 403);
+    }
 
     const tokens = generateAuthTokens(user.id!, toTokenRole(user.role!));
     // We only need the new access token
-    
+
     return { user, accessToken: tokens.accessToken };
   }
 

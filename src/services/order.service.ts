@@ -158,10 +158,13 @@ export class OrderService {
         if (!clientId) {
           throw new Error("A client_id (user ID) is required to create an order as admin/staff.");
         }
-        // Verify user exists
-        const [user]: any = await pool.execute("SELECT id FROM users WHERE id = ?", [clientId]);
+        // Verify user exists and is active
+        const [user]: any = await pool.execute("SELECT id, is_active FROM users WHERE id = ?", [clientId]);
         if (user.length === 0) {
-          throw new Error(`Client (User) with ID ${clientId} not found.`);
+          throw new AppError(`Client (User) with ID ${clientId} not found.`, 404);
+        }
+        if (!user[0].is_active) {
+          throw new AppError("Cannot create an order for a deactivated client", 400);
         }
       }
 

@@ -2,6 +2,8 @@ import bcrypt from "bcryptjs";
 import { UserRepository, type IUserMySQL } from "../repositories/user.repository";
 import { ClientProfileRepository } from "../repositories/clientProfile.repository";
 import { PropertyRepository, type IPropertyRow } from "../repositories/property.repository";
+import { OrderRepository } from "../repositories/order.repository";
+import { RouteRepository } from "../repositories/route.repository";
 import { AppError } from "../utils/AppError";
 import { duplicateEntryMessage } from "../utils/mysqlErrors";
 import type { IClientProfileRow } from "../repositories/clientProfile.repository";
@@ -228,9 +230,43 @@ export class UserService {
     return { user, client_profile, properties };
   }
 
-  static async deactivateUser(rawId: string): Promise<IUserMySQL> {
+  static async deactivateUser(rawId: string, requestingUserId: EntityId): Promise<IUserMySQL> {
+    // Guard: an admin cannot deactivate their own account
+    if (rawId === requestingUserId) {
+      throw new AppError("Cannot deactivate your own account", 403);
+    }
+
     const user = await UserRepository.findById(rawId);
     if (!user) throw new AppError("User not found", 404);
+
+    // Guard: client must have no active orders
+    if (user.role === "client") {
+      const ACTIVE_STATUSES = [
+        "Pending", "Assigned", "Transit", "Arrived",
+        "Washing", "Drying", "Ironing", "QualityCheck",
+        "ReadyToDeliver", "Collected",
+      ];
+      const activeCount = await OrderRepository.countFiltered({
+        client_id: rawId,
+        status: ACTIVE_STATUSES,
+      });
+      if (activeCount > 0) {
+        throw new AppError("Client has active orders", 409);
+      }
+    }
+
+    // Guard: driver must have no planned or in-progress routes
+    if (user.role === "driver") {
+      const { total: planned } = await RouteRepository.findAll(
+        { driver_id: rawId, status: "planned" }, 1, 0
+      );
+      const { total: inProgress } = await RouteRepository.findAll(
+        { driver_id: rawId, status: "in_progress" }, 1, 0
+      );
+      if (planned + inProgress > 0) {
+        throw new AppError("Driver has active routes", 409);
+      }
+    }
 
     await UserRepository.update(rawId, { is_active: false });
 

@@ -20,6 +20,6 @@ router.get("/:id", authorize("admin", "staff"), getUserById);
 
 // Admin only: update/deactivate users
 router.put("/:id", authorize("admin"), validate(updateUserByAdminSchema), updateUser);
-router.delete("/:id", authorize("admin"), deactivateUser);
+router.patch("/:id/deactivate", authorize("admin"), deactivateUser);
 
 export default router;

@@ -191,7 +191,8 @@ export const deactivateUser = async (req: Request, res: Response) => {
       return sendError(res, 400, "Invalid user id");
     }
 
-    const updated = await UserService.deactivateUser(rawId);
+    const requestingUserId = req.user!.userId;
+    const updated = await UserService.deactivateUser(rawId, requestingUserId);
     return sendSuccess(res, 200, "User deactivated", stripUserSecrets(updated));
   } catch (error: unknown) {
     if (error instanceof AppError) return sendError(res, error.statusCode, error.message);
