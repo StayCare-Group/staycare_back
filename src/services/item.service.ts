@@ -1,4 +1,5 @@
 import { ItemRepository, type ItemInsertInput } from "../repositories/item.repository";
+import { AppError } from "../utils/AppError";
 
 export class ItemService {
   static async getAllItems(is_active?: boolean, limit?: number, offset?: number, search?: string) {
@@ -28,6 +29,17 @@ export class ItemService {
 
 
   static async deleteItem(id: string) {
+    const item = await ItemRepository.findById(id);
+    if (!item) throw new AppError("Item not found", 404);
+
+    const activeOrderCount = await ItemRepository.countActiveOrdersUsingItem(id);
+    if (activeOrderCount > 0) {
+      throw new AppError(
+        `Cannot delete item '${item.name}' because it is associated with ${activeOrderCount} order(s) currently in progress.`,
+        409
+      );
+    }
+
     return await ItemRepository.delete(id);
   }
 

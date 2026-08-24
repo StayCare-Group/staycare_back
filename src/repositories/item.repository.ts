@@ -114,6 +114,18 @@ export class ItemRepository {
     await pool.execute(`UPDATE items SET ${setClause} WHERE id = ?`, values);
   }
 
+  static async countActiveOrdersUsingItem(id: EntityId): Promise<number> {
+    const query = `
+      SELECT COUNT(*) as total
+      FROM order_items oi
+      JOIN orders o ON oi.order_id = o.id
+      WHERE oi.item_id = ?
+        AND o.status NOT IN ('completed', 'cancelled')
+    `;
+    const [rows] = await pool.query<RowDataPacket[]>(query, [id]);
+    return (rows[0] as { total: number }).total;
+  }
+
   static async delete(id: EntityId): Promise<void> {
     await pool.execute("DELETE FROM items WHERE id = ?", [id]);
   }

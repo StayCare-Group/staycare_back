@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { ItemService } from "../services/item.service";
+import { AppError } from "../utils/AppError";
 import { sendSuccess, sendError } from "../utils/response";
 import { parsePagination, paginationMeta } from "../utils/paginate";
 
@@ -192,6 +193,7 @@ export const deleteItem = async (req: Request, res: Response) => {
     await ItemService.deleteItem(itemId);
     return sendSuccess(res, 200, "Item deleted");
   } catch (error) {
+    if (error instanceof AppError) return sendError(res, error.statusCode, error.message);
     return sendError(res, 400, "Item deletion failed");
   }
 };
