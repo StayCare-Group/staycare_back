@@ -66,7 +66,7 @@ export class ClientProfileRepository {
   }
 
   static async countFiltered(filter: { is_active?: boolean | undefined; search?: string | undefined }): Promise<number> {
-    let where = "1=1";
+    let where = "r.name = 'client'";
     const params: any[] = [];
     if (filter.is_active !== undefined) {
       where += " AND u.is_active = ?";
@@ -78,7 +78,11 @@ export class ClientProfileRepository {
       params.push(pattern, pattern, pattern);
     }
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT COUNT(*) AS total FROM client_profiles cp INNER JOIN users u ON cp.user_id = u.id WHERE ${where}`,
+      `SELECT COUNT(*) AS total
+       FROM users u
+       INNER JOIN roles r ON u.role_id = r.id
+       LEFT JOIN client_profiles cp ON cp.user_id = u.id
+       WHERE ${where}`,
       params
     );
 
@@ -91,7 +95,7 @@ export class ClientProfileRepository {
     filter: { is_active?: boolean | undefined; search?: string | undefined } = {}
   ): Promise<ClientListRow[]> {
 
-    let where = "1=1";
+    let where = "r.name = 'client'";
     const params: any[] = [];
     if (filter.is_active !== undefined) {
       where += " AND u.is_active = ?";
@@ -105,13 +109,21 @@ export class ClientProfileRepository {
     params.push(limit, offset);
 
     const [rows] = await pool.query<RowDataPacket[]>(
-      `SELECT cp.id AS client_profile_id, cp.user_id, cp.contact_person, cp.vat_number, cp.billing_address,
-              cp.credits_terms_days, cp.pricing_tier, cp.created_at, cp.updated_at,
+      `SELECT COALESCE(cp.id, u.id) AS client_profile_id,
+              u.id AS user_id,
+              COALESCE(cp.contact_person, u.name) AS contact_person,
+              COALESCE(cp.vat_number, '') AS vat_number,
+              COALESCE(cp.billing_address, '') AS billing_address,
+              COALESCE(cp.credits_terms_days, 30) AS credits_terms_days,
+              COALESCE(cp.pricing_tier, 'standard') AS pricing_tier,
+              COALESCE(cp.created_at, u.created_at) AS created_at,
+              COALESCE(cp.updated_at, u.updated_at) AS updated_at,
               u.name AS user_name, u.email, u.phone, u.language, u.is_active
-       FROM client_profiles cp
-       INNER JOIN users u ON u.id = cp.user_id
+       FROM users u
+       INNER JOIN roles r ON u.role_id = r.id
+       LEFT JOIN client_profiles cp ON cp.user_id = u.id
        WHERE ${where}
-       ORDER BY cp.id DESC
+       ORDER BY u.created_at DESC
        LIMIT ? OFFSET ?`,
       params
     );

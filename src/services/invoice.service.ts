@@ -37,6 +37,7 @@ export class InvoiceService {
       let calculatedVatAmount = 0;
       let calculatedTotal = 0;
       const orderItemsMap = new Map<string, any[]>();
+      const ordersMap = new Map<string, any>();
 
       // 1. Process orders (Main source of revenue)
       for (const orderId of data.order_ids) {
@@ -56,23 +57,31 @@ export class InvoiceService {
         calculatedVatAmount += Number(order.vat_amount);
         calculatedTotal += Number(order.total);
 
-        // Store items per order to insert as line items after invoice is created
+        // Store items and order info per order to insert after invoice is created
         orderItemsMap.set(String(orderId), items);
+        ordersMap.set(String(orderId), order);
       }
 
       // 2. Process additional line items (Extra charges)
+      const vatRate = (data.vat_percentage || 18) / 100;
       const extraItems = data.line_items || [];
       for (const item of extraItems) {
-        calculatedSubtotal += Number(item.total_price);
-        // Assuming extra items prices are already calculated with VAT or exempt 
-        // OR calculate VAT for them based on vat_percentage if desired. 
-        // For now, let's just add to total to match subtotal logic.
-        calculatedTotal += Number(item.total_price);
+        const itemSubtotal = Number(item.total_price);
+        const itemVat = itemSubtotal * vatRate;
+        calculatedSubtotal += itemSubtotal;
+        calculatedVatAmount += itemVat;
+        calculatedTotal += itemSubtotal + itemVat;
+      }
+
+      let resolvedClientId = data.client_id;
+      const profileUserId = await ClientProfileRepository.findUserIdByProfileId(data.client_id);
+      if (profileUserId) {
+        resolvedClientId = profileUserId;
       }
 
       const invoiceId = await InvoiceRepository.insert(conn, {
         invoice_number: invoiceNumber,
-        client_id: data.client_id,
+        client_id: resolvedClientId,
         issue_date: issueDate,
         due_date: data.due_date,
         subtotal: calculatedSubtotal,
@@ -105,13 +114,14 @@ export class InvoiceService {
 
       // Link orders and mark them as INVOICED
       for (const orderId of data.order_ids) {
+        const order = ordersMap.get(String(orderId));
         await InvoiceRepository.linkOrder(conn, invoiceId, orderId);
         await OrderRepository.update(orderId, { is_invoiced: true }, conn);
         await OrderRepository.insertHistory(conn, {
           order_id: orderId,
           changed_by_user_id: userId,
           is_system: false,
-          status: OrderStatus.COMPLETED, // Suggestion: Use COMPLETED or keep current
+          status: order?.status || OrderStatus.COMPLETED,
           note: `Billed via invoice #${invoiceNumber}`,
         });
       }

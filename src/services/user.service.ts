@@ -103,8 +103,19 @@ export class UserService {
       if (Object.keys(userPatch).length) await UserRepository.update(userId, userPatch);
       
       const profile = await ClientProfileRepository.findByUserId(userId);
-      if (Object.keys(profilePatch).length && profile?.id) {
-        await ClientProfileRepository.update(profile.id, profilePatch);
+      if (profile?.id) {
+        if (Object.keys(profilePatch).length) {
+          await ClientProfileRepository.update(profile.id, profilePatch);
+        }
+      } else if (user.role === "client") {
+        await ClientProfileRepository.create({
+          user_id: userId,
+          contact_person: body.contact_person ?? user.name ?? '',
+          vat_number: body.vat_number ?? '',
+          billing_address: body.billing_address ?? '',
+          credits_terms_days: body.credits_terms_days ?? 30,
+          pricing_tier: body.pricing_tier ?? 'standard',
+        });
       }
     } catch (err) {
       const dup = duplicateEntryMessage(err);

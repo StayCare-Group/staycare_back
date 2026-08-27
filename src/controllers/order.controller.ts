@@ -134,10 +134,14 @@ export const createOrder = async (req: Request, res: Response) => {
  */
 export const getAllOrders = async (req: Request, res: Response) => {
   try {
-    const { status, client_id, client, service_type, from, to, pickup_from, pickup_to, search } = req.query;
+    const { status, is_invoiced, client_id, client, service_type, from, to, pickup_from, pickup_to, search } = req.query;
     const { page, limit, skip } = parsePagination(req);
     const resolvedClientId = (client_id || client) as string | undefined;
     const filter: any = { status, client_id: resolvedClientId, service_type, from, to, pickup_from, pickup_to, search };
+
+    if (is_invoiced !== undefined) {
+      filter.is_invoiced = String(is_invoiced).toLowerCase() === "true" || String(is_invoiced) === "1";
+    }
 
     if (typeof status === "string" && status.includes(",")) {
       filter.status = status.split(",").map((s) => s.trim());
