@@ -8,7 +8,8 @@ import { generateEntityId, type EntityId } from "../utils/id";
  * Converts a snake_case OrderStatus enum value to the PascalCase string
  * stored in the MySQL database. Used before INSERT / UPDATE queries.
  */
-function toDbOrderStatus(status: unknown): string | any {
+/** @internal Exported only for unit testing. Do not use outside tests. */
+export function toDbOrderStatus(status: unknown): string | any {
   if (typeof status !== "string") return status;
   const normalized = status.trim().toLowerCase();
   const map: Record<string, string> = {
@@ -36,7 +37,8 @@ function toDbOrderStatus(status: unknown): string | any {
  * snake_case value used by the OrderStatus enum and the API response.
  * The database schema is NOT modified; normalization happens in code only.
  */
-function fromDbOrderStatus(dbValue: string): string {
+/** @internal Exported only for unit testing. Do not use outside tests. */
+export function fromDbOrderStatus(dbValue: string): string {
   if (!dbValue) return dbValue;
   const map: Record<string, string> = {
     Pending: "pending",
@@ -102,6 +104,8 @@ export interface IOrderStatusHistoryMySQL {
   id: EntityId;
   order_id: EntityId;
   changed_by_user_id: EntityId | null;
+  changed_by_user_name?: string | null;
+  changed_by_user_role?: string | null;
   is_system: boolean;
   status: string;
   note: string | null;
@@ -143,11 +147,19 @@ export class OrderRepository {
 
   static async findHistoryByOrderId(orderId: EntityId): Promise<IOrderStatusHistoryMySQL[]> {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT * FROM order_status_history WHERE order_id = ? ORDER BY changed_at ASC`,
+      `SELECT h.*, 
+              u.name AS changed_by_user_name, 
+              r.name AS changed_by_user_role 
+       FROM order_status_history h
+       LEFT JOIN users u ON h.changed_by_user_id = u.id
+       LEFT JOIN roles r ON u.role_id = r.id
+       WHERE h.order_id = ? 
+       ORDER BY h.changed_at ASC`,
       [orderId]
     );
     return (rows as any[]).map((r) => ({
       ...r,
+      is_system: Boolean(r.is_system),
       status: fromDbOrderStatus(r.status),
     })) as IOrderStatusHistoryMySQL[];
   }

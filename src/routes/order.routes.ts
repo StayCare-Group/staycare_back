@@ -76,7 +76,7 @@ router.patch(
 
 router.patch(
   "/:id/deliver",
-  authorize("admin", "driver"),
+  authorize("admin", "driver", "staff"),
   validate(confirmDriverActionSchema),
   confirmDelivery,
 );

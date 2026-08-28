@@ -61,7 +61,7 @@ export class OrderService {
     try {
       const order = await OrderRepository.findById(orderId);
       if (!order || !order.client_id) return;
-      
+
       const [uRows]: any = await pool.execute(
         "SELECT email, name as contact_person FROM users WHERE id = ?",
         [order.client_id]
@@ -169,7 +169,7 @@ export class OrderService {
       }
 
       const orderNumber = this.generateOrderNumber();
-      
+
       const {
         subtotal,
         vatPercentage,
@@ -239,12 +239,12 @@ export class OrderService {
   }
 
   static async receiveInPlant(
-    orderId: string, 
-    userId: string, 
-    data: { 
-      staff_confirmed_bags: number; 
+    orderId: string,
+    userId: string,
+    data: {
+      staff_confirmed_bags: number;
       special_notes?: string;
-      items: { item_id: string; quantity: number; qty_good: number; qty_bad: number; qty_stained: number }[] 
+      items: { item_id: string; quantity: number; qty_good: number; qty_bad: number; qty_stained: number }[]
     }
   ) {
     const conn = await pool.getConnection();
@@ -463,8 +463,8 @@ export class OrderService {
   }
 
   static async confirmPickup(orderId: string, data: any, userId: string, role: string) {
-    if (role !== "driver" && role !== "admin") {
-      throw new Error("Only drivers can confirm pickups");
+    if (role !== "driver" && role !== "admin" && role !== "staff") {
+      throw new Error("Only drivers, staff or admin can confirm pickups");
     }
     const conn = await pool.getConnection();
     try {
@@ -477,7 +477,7 @@ export class OrderService {
       const updateData: Partial<IOrderMySQL> = {
         actual_bags: data.actual_bags,
         status: OrderStatus.TRANSIT,
-        driver_id: userId,
+        ...(role === "driver" ? { driver_id: userId } : {}),
       };
 
       if (updatedNotes !== (order?.special_notes ?? null)) {
@@ -567,8 +567,8 @@ export class OrderService {
   }
 
   static async confirmCollection(orderId: string, userId: string, role: string) {
-    if (role !== "driver" && role !== "admin") {
-      throw new Error("Only drivers can confirm collection from facility");
+    if (role !== "driver" && role !== "admin" && role !== "staff") {
+      throw new Error("Only drivers, staff or admin can confirm collection from facility");
     }
     const conn = await pool.getConnection();
     try {
@@ -608,8 +608,8 @@ export class OrderService {
     if (order.status === OrderStatus.ASSIGNED) {
       // Driver is starting to collect (pickup)
       return this.confirmPickup(orderId, data, userId, role);
-    } 
-    
+    }
+
     if (order.status === OrderStatus.READY_TO_DELIVERY || order.status === OrderStatus.COLLECTED) {
       // Driver is delivering to client
       return this.confirmDelivery(orderId, data, userId, role);
@@ -619,8 +619,8 @@ export class OrderService {
   }
 
   static async confirmDelivery(orderId: string, data: any, userId: string, role: string) {
-    if (role !== "driver" && role !== "admin") {
-      throw new Error("Only drivers can confirm delivery");
+    if (role !== "driver" && role !== "admin" && role !== "staff") {
+      throw new Error("Only drivers, staff or admin can confirm delivery");
     }
     const conn = await pool.getConnection();
     try {
