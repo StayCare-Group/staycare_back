@@ -646,8 +646,8 @@ export class OrderService {
         }
       }
 
-      const receivedByStr = data.received_by ? ` (Recibido por: ${data.received_by})` : "";
-      const pkgStr = data.packages_delivered ? ` - ${data.packages_delivered} paquete(s)` : "";
+      const receivedByStr = data.received_by ? ` (Received by: ${data.received_by})` : "";
+      const pkgStr = data.packages_delivered ? ` - ${data.packages_delivered} package(s)` : "";
 
       await OrderRepository.insertHistory(conn, {
         order_id: orderId,

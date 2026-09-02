@@ -249,7 +249,8 @@ export const assignMachine = async (req: Request, res: Response) => {
     const { order_id } = req.body;
     if (!order_id) return sendError(res, 400, "order_id is required");
 
-    const machine = await MachineService.assignMachine(req.params.id as string, String(order_id));
+    const userId = req.user?.userId;
+    const machine = await MachineService.assignMachine(req.params.id as string, String(order_id), userId);
     return sendSuccess(res, 200, "Machine assigned", machine);
   } catch (error: any) {
     const status = error.status ?? 400;

@@ -152,15 +152,17 @@ export class MachineRepository {
     await pool.execute(`UPDATE machines SET ${setClause} WHERE id = ?`, values);
   }
 
-  static async assign(id: EntityId, orderId: EntityId): Promise<void> {
-    await pool.execute(
+  static async assign(id: EntityId, orderId: EntityId, conn?: PoolConnection): Promise<void> {
+    const exec = conn || pool;
+    await exec.execute(
       `UPDATE machines SET status = 'running', current_order_id = ?, started_at = NOW() WHERE id = ?`,
       [orderId, id]
     );
   }
 
-  static async release(id: EntityId): Promise<void> {
-    await pool.execute(
+  static async release(id: EntityId, conn?: PoolConnection): Promise<void> {
+    const exec = conn || pool;
+    await exec.execute(
       `UPDATE machines SET status = 'available', current_order_id = NULL, started_at = NULL WHERE id = ?`,
       [id]
     );

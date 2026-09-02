@@ -232,6 +232,27 @@ export class OrderRepository {
     return id;
   }
 
+  static async updateLatestHistoryNote(
+    conn: PoolConnection,
+    orderId: EntityId,
+    status: string,
+    note: string,
+    userId?: EntityId | null
+  ): Promise<boolean> {
+    const dbStatus = toDbOrderStatus(status);
+    const rawStatus = String(status);
+    const [result]: any = await conn.execute(
+      `UPDATE order_status_history 
+       SET note = ?, 
+           changed_by_user_id = COALESCE(?, changed_by_user_id) 
+       WHERE order_id = ? AND (status = ? OR status = ?) 
+       ORDER BY changed_at DESC 
+       LIMIT 1`,
+      [note, userId || null, orderId, dbStatus, rawStatus]
+    );
+    return Boolean(result && result.affectedRows > 0);
+  }
+
   static async update(id: EntityId, data: Partial<IOrderMySQL>, conn?: PoolConnection): Promise<void> {
     const nextData: Partial<IOrderMySQL> = { ...data };
     if (nextData.status) {
