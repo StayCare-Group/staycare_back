@@ -123,7 +123,9 @@ export class OrderRepository {
               p.property_name,
               p.address as property_address,
               p.area as property_area,
-              p.city as property_city
+              p.city as property_city,
+              p.lat as property_lat,
+              p.lng as property_lng
        FROM orders o
        INNER JOIN users u ON o.client_id = u.id
        LEFT JOIN client_profiles cp ON u.id = cp.user_id
@@ -401,7 +403,9 @@ export class OrderRepository {
               du.name as driver_name,
               p.property_name,
               p.address as property_address,
-              p.area as property_area
+              p.area as property_area,
+              p.lat as property_lat,
+              p.lng as property_lng
        FROM orders o
        INNER JOIN users u ON o.client_id = u.id
        LEFT JOIN users du ON o.driver_id = du.id

@@ -30,8 +30,21 @@ export class RouteRepository {
     let params: any[] = [];
 
     if (filter.status) {
-      whereClauses.push("r.status = ?");
-      params.push(filter.status);
+      const statuses = Array.isArray(filter.status)
+        ? filter.status
+        : String(filter.status)
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+
+      if (statuses.length === 1) {
+        whereClauses.push("r.status = ?");
+        params.push(statuses[0]);
+      } else if (statuses.length > 1) {
+        const placeholders = statuses.map(() => "?").join(", ");
+        whereClauses.push(`r.status IN (${placeholders})`);
+        params.push(...statuses);
+      }
     }
     if (filter.driver_id) {
       whereClauses.push("r.driver_id = ?");
@@ -80,7 +93,8 @@ export class RouteRepository {
                 o.actual_bags, o.special_notes, o.total, o.is_invoiced,
                 u.name as client_name, cp.contact_person as client_contact, u.phone as client_phone,
                 p.property_name, p.address as property_address, p.city as property_city, 
-                p.area as property_area, p.access_notes as property_access_notes
+                p.area as property_area, p.access_notes as property_access_notes,
+                p.lat as property_lat, p.lng as property_lng
          FROM route_orders ro
          JOIN orders o ON ro.order_id = o.id
          JOIN users u ON o.client_id = u.id
@@ -134,7 +148,8 @@ export class RouteRepository {
               o.actual_bags, o.special_notes, o.total, o.is_invoiced,
               u.name as client_name, cp.contact_person as client_contact, u.phone as client_phone,
               p.property_name, p.address as property_address, p.city as property_city, 
-              p.area as property_area, p.access_notes as property_access_notes
+              p.area as property_area, p.access_notes as property_access_notes,
+              p.lat as property_lat, p.lng as property_lng
        FROM route_orders ro
        JOIN orders o ON ro.order_id = o.id
        JOIN users u ON o.client_id = u.id
