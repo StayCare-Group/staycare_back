@@ -113,16 +113,20 @@ export interface IOrderStatusHistoryMySQL {
 }
 
 export class OrderRepository {
-  static async findById(id: EntityId): Promise<(IOrderMySQL & { client_name?: string; driver_name?: string; property_name?: string }) | null> {
+  static async findById(id: EntityId): Promise<(IOrderMySQL & { client_name?: string; client_phone?: string; client_contact_person?: string; driver_name?: string; property_name?: string; property_city?: string }) | null> {
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT o.*, 
               u.name as client_name,
+              u.phone as client_phone,
+              cp.contact_person as client_contact_person,
               du.name as driver_name,
               p.property_name,
               p.address as property_address,
-              p.area as property_area
+              p.area as property_area,
+              p.city as property_city
        FROM orders o
        INNER JOIN users u ON o.client_id = u.id
+       LEFT JOIN client_profiles cp ON u.id = cp.user_id
        LEFT JOIN users du ON o.driver_id = du.id
        LEFT JOIN properties p ON o.property_id = p.id
        WHERE o.id = ? LIMIT 1`,
