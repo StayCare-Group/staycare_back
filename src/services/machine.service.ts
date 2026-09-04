@@ -71,9 +71,6 @@ export class MachineService {
 
       const machine = await MachineRepository.findById(id);
       if (!machine) throw Object.assign(new Error("Machine not found"), { status: 404 });
-      if (machine.status === "running") {
-        throw Object.assign(new Error("Machine is already running another order"), { status: 400 });
-      }
       if (machine.status === "maintenance") {
         throw Object.assign(new Error("Machine is under maintenance"), { status: 400 });
       }
@@ -82,10 +79,10 @@ export class MachineService {
       const order = await OrderRepository.findById(orderId);
       if (!order) throw Object.assign(new Error("Order not found"), { status: 404 });
 
-      // If order is currently assigned to another machine, release that machine first
+      // If order is currently assigned to another machine, release it from that machine first
       const existingAssignedMachine = await MachineRepository.findByOrderId(orderId);
       if (existingAssignedMachine && existingAssignedMachine.id !== id) {
-        await MachineRepository.release(existingAssignedMachine.id, conn);
+        await MachineRepository.releaseOrder(existingAssignedMachine.id, orderId, conn);
       }
 
       await MachineRepository.assign(id, orderId, conn);
@@ -129,11 +126,15 @@ export class MachineService {
     }
   }
 
-  static async releaseMachine(id: EntityId) {
+  static async releaseMachine(id: EntityId, orderId?: EntityId) {
     const machine = await MachineRepository.findById(id);
     if (!machine) throw Object.assign(new Error("Machine not found"), { status: 404 });
 
-    await MachineRepository.release(id);
+    if (orderId) {
+      await MachineRepository.releaseOrder(id, orderId);
+    } else {
+      await MachineRepository.release(id);
+    }
     return MachineRepository.findById(id);
   }
 

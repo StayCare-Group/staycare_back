@@ -280,7 +280,8 @@ export const assignMachine = async (req: Request, res: Response) => {
  */
 export const releaseMachine = async (req: Request, res: Response) => {
   try {
-    const machine = await MachineService.releaseMachine(req.params.id as string);
+    const orderId = (req.body?.order_id || req.query?.order_id) as string | undefined;
+    const machine = await MachineService.releaseMachine(req.params.id as string, orderId);
     return sendSuccess(res, 200, "Machine released", machine);
   } catch (error: any) {
     const status = error.status ?? 400;

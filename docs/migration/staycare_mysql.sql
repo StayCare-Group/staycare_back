@@ -260,6 +260,23 @@ CREATE TABLE `machines` (
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE `machine_orders` (
+  `id` CHAR(36) NOT NULL,
+  `machine_id` CHAR(36) NOT NULL,
+  `order_id` CHAR(36) NOT NULL,
+  `assigned_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_machine_order` (`machine_id`, `order_id`),
+  KEY `idx_mo_machine_id` (`machine_id`),
+  KEY `idx_mo_order_id` (`order_id`),
+  CONSTRAINT `fk_mo_machine` 
+    FOREIGN KEY (`machine_id`) REFERENCES `machines` (`id`) 
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_mo_order` 
+    FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) 
+    ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE `order_items` (
   `id` CHAR(36) NOT NULL,
   `order_id` CHAR(36) NOT NULL,

@@ -7,6 +7,7 @@ import { sendOrderStatusEmail } from "../utils/mail";
 import { PoolConnection } from "mysql2/promise";
 import { AppError } from "../utils/AppError";
 import { InvoiceService } from "./invoice.service";
+import { MachineRepository } from "../repositories/machine.repository";
 
 const EXPRESS_SURCHARGE = 25.0;
 
@@ -921,10 +922,7 @@ export class OrderService {
 
       await conn.execute("DELETE FROM route_orders WHERE order_id = ?", [id]);
 
-      await conn.execute(
-        "UPDATE machines SET current_order_id = NULL, status = 'available' WHERE current_order_id = ?",
-        [id]
-      );
+      await MachineRepository.releaseOrderByOrderId(id, conn);
 
       await OrderRepository.insertHistory(conn, {
         order_id: id,
