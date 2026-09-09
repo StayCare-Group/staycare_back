@@ -239,6 +239,7 @@ CREATE TABLE `items` (
   UNIQUE KEY `uq_items_code` (`item_code`),
   KEY `idx_items_is_active` (`is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `machines` (
   `id` CHAR(36) NOT NULL,
@@ -405,3 +406,16 @@ ON DUPLICATE KEY UPDATE vat_number = VALUES(vat_number);
 SET SQL_MODE=@OLD_SQL_MODE;
 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
+
+-- Tabla para precios personalizados (1 a 1 directo con cliente)
+CREATE TABLE `client_custom_prices` (
+  `client_id` CHAR(36) NOT NULL,
+  `item_id` CHAR(36) NOT NULL,
+  `price` DECIMAL(10,2) NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`client_id`, `item_id`),
+  KEY `idx_ccp_item` (`item_id`),
+  CONSTRAINT `fk_ccp_client` FOREIGN KEY (`client_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_ccp_item` FOREIGN KEY (`item_id`) REFERENCES `items` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

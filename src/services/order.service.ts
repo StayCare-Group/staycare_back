@@ -8,6 +8,7 @@ import { PoolConnection } from "mysql2/promise";
 import { AppError } from "../utils/AppError";
 import { InvoiceService } from "./invoice.service";
 import { MachineRepository } from "../repositories/machine.repository";
+import { PricingService } from "./pricing.service";
 
 const EXPRESS_SURCHARGE = 25.0;
 
@@ -85,28 +86,60 @@ export class OrderService {
 
   private static async calculateTotals(
     items: { item_id: string; quantity: number }[],
-    serviceType: "standard" | "express"
+    serviceType: "standard" | "express",
+    clientId?: string | null,
+    existingOrderItems?: { item_id: string | null; unit_price: number }[]
   ) {
     let subtotal = 0;
     const vatPercentage = 18;
     const calculatedItems = [];
 
+    // Separate items that already exist in the order from completely new items
+    const newItemsToResolve = [];
+    const itemsWithFrozenPrice = [];
+
     for (const item of items) {
-      const itemDef = await ItemRepository.findById(item.item_id);
-      if (!itemDef) {
-        throw new Error(`Item with ID ${item.item_id} not found.`);
+      const existing = existingOrderItems?.find(e => String(e.item_id) === String(item.item_id));
+      if (existing) {
+        itemsWithFrozenPrice.push({ ...item, frozen_unit_price: existing.unit_price });
+      } else {
+        newItemsToResolve.push(item);
       }
-      if (item.quantity > 0 && (itemDef.is_active as any) === 0) {
-        throw new AppError(`Item '${itemDef.name}' (${itemDef.item_code}) is inactive and cannot be added to a new order.`, 400);
+    }
+
+    // Resolve prices for completely new items using the client's current price list
+    const resolvedNewItems = await PricingService.resolveOrderItemsPrices(clientId!, newItemsToResolve);
+
+    for (const item of items) {
+      const existing = itemsWithFrozenPrice.find(i => String(i.item_id) === String(item.item_id));
+      
+      let unitPrice: number;
+      let itemCode: string;
+      let name: string;
+
+      if (existing) {
+        // Use frozen price
+        const itemDef = await ItemRepository.findById(item.item_id);
+        if (!itemDef) throw new AppError(`Item with ID ${item.item_id} not found.`, 404);
+        unitPrice = Number(existing.frozen_unit_price);
+        itemCode = itemDef.item_code;
+        name = itemDef.name;
+      } else {
+        // Use newly resolved price
+        const resolved = resolvedNewItems.find(r => String(r.item_id) === String(item.item_id));
+        if (!resolved) throw new AppError(`Could not resolve price for item ${item.item_id}`, 500);
+        unitPrice = Number(resolved.unit_price);
+        itemCode = resolved.item_code;
+        name = resolved.name;
       }
-      const unitPrice = itemDef.base_price;
+
       const totalPrice = unitPrice * item.quantity;
       subtotal += totalPrice;
 
       calculatedItems.push({
         item_id: item.item_id,
-        item_code: itemDef.item_code,
-        name: itemDef.name,
+        item_code: itemCode,
+        name: name,
         quantity: item.quantity,
         unit_price: unitPrice,
         total_price: totalPrice,
@@ -177,7 +210,7 @@ export class OrderService {
         vatAmount,
         total,
         calculatedItems
-      } = await this.calculateTotals(data.items || [], data.service_type || "standard");
+      } = await this.calculateTotals(data.items || [], data.service_type || "standard", clientId);
 
       const initialNotes = appendNote(null, data.special_notes, "pending");
 
@@ -260,6 +293,8 @@ export class OrderService {
         throw new AppError("No se puede recibir o modificar una orden que ya está facturada y completada satisfactoriamente.", 403);
       }
 
+      const existingItems = await OrderRepository.findItemsByOrderId(orderId);
+
       // 1. Clear existing items
       await OrderRepository.deleteItemsByOrderId(conn, orderId);
 
@@ -277,7 +312,7 @@ export class OrderService {
         vatAmount,
         total,
         calculatedItems
-      } = await this.calculateTotals(data.items || [], order.service_type);
+      } = await this.calculateTotals(data.items || [], order.service_type, order.client_id, existingItems);
 
       for (const item of calculatedItems) {
         const sourceItem = data.items.find(i => i.item_id === item.item_id);
@@ -358,6 +393,7 @@ export class OrderService {
       }
 
       if (items && Array.isArray(items)) {
+        const existingItems = await OrderRepository.findItemsByOrderId(id);
         await OrderRepository.deleteItemsByOrderId(conn, id);
 
         const {
@@ -365,7 +401,7 @@ export class OrderService {
           vatAmount,
           total,
           calculatedItems
-        } = await this.calculateTotals(items, data.service_type || order.service_type);
+        } = await this.calculateTotals(items, data.service_type || order.service_type, order.client_id, existingItems);
 
         for (const item of calculatedItems) {
           const sourceItem = items.find((i: any) => i.item_id === item.item_id);
