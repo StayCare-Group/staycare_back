@@ -42,7 +42,7 @@ export class PriceListService {
 
       const itemDef = await ItemRepository.findById(itemId);
       if (!itemDef) {
-        throw new AppError(`Item con ID ${itemId} no existe en el catálogo.`, 404);
+        throw new AppError(`Item with ID ${itemId} does not exist in the catalog.`, 404);
       }
 
       await PriceListRepository.upsertItem(clientId, itemId, price, conn);
@@ -68,7 +68,7 @@ export class PriceListService {
       for (const item of items) {
         const itemDef = await ItemRepository.findById(item.item_id);
         if (!itemDef) {
-          throw new AppError(`Item con ID ${item.item_id} no existe en el catálogo.`, 404);
+          throw new AppError(`Item with ID ${item.item_id} does not exist in the catalog.`, 404);
         }
         await PriceListRepository.upsertItem(clientId, item.item_id, item.price, conn);
       }

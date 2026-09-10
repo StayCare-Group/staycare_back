@@ -27,11 +27,11 @@ describe("PricingService", () => {
   describe("resolveItemPrice", () => {
     it("throws if item not found", async () => {
       vi.mocked(ItemRepository.findById).mockResolvedValueOnce(null);
-      await expect(PricingService.resolveItemPrice("client-1", "item-1", 1)).rejects.toThrow(/no encontrado/);
+      await expect(PricingService.resolveItemPrice("client-1", "item-1", 1)).rejects.toThrow(/not found/);
     });
 
     it("returns base_catalog if client has no custom price", async () => {
-      vi.mocked(ItemRepository.findById).mockResolvedValueOnce({ id: "item-1", price: 10 } as any);
+      vi.mocked(ItemRepository.findById).mockResolvedValueOnce({ id: "item-1", item_code: "I-1", name: "Item 1", base_price: 10 } as any);
       vi.mocked(PriceListRepository.findItemByClientAndItemId).mockResolvedValueOnce(null);
 
       const res = await PricingService.resolveItemPrice("client-1", "item-1", 2);
@@ -41,7 +41,7 @@ describe("PricingService", () => {
     });
 
     it("returns custom_price_list if item is in custom list", async () => {
-      vi.mocked(ItemRepository.findById).mockResolvedValueOnce({ id: "item-1", price: 10 } as any);
+      vi.mocked(ItemRepository.findById).mockResolvedValueOnce({ id: "item-1", item_code: "I-1", name: "Item 1", base_price: 10 } as any);
       vi.mocked(PriceListRepository.findItemByClientAndItemId).mockResolvedValueOnce({ price: 7 } as any);
 
       const res = await PricingService.resolveItemPrice("client-1", "item-1", 3);
@@ -54,8 +54,8 @@ describe("PricingService", () => {
   describe("resolveOrderItemsPrices", () => {
     it("resolves batch of items handling mix of custom and base prices", async () => {
       vi.mocked(ItemRepository.findById).mockImplementation(async (id) => {
-        if (id === "item-1") return { id: "item-1", price: 10 } as any;
-        if (id === "item-2") return { id: "item-2", price: 20 } as any;
+        if (id === "item-1") return { id: "item-1", item_code: "I-1", name: "Item 1", base_price: 10 } as any;
+        if (id === "item-2") return { id: "item-2", item_code: "I-2", name: "Item 2", base_price: 20 } as any;
         return null;
       });
 

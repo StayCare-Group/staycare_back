@@ -32,7 +32,7 @@ describe("PriceListService", () => {
     it("fails if attempting to add an item not in base catalog", async () => {
       vi.mocked(ItemRepository.findById).mockResolvedValueOnce(null);
       await expect(PriceListService.upsertClientItems("client-1", [{ item_id: "fake", price: 10 }]))
-        .rejects.toThrow(/no existe en el catálogo/);
+        .rejects.toThrow(/does not exist in the catalog/);
     });
 
     it("succeeds if all items exist", async () => {

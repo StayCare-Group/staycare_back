@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS `order_photos`;
 DROP TABLE IF EXISTS `order_items`;
 DROP TABLE IF EXISTS `machines`;
 DROP TABLE IF EXISTS `items`;
+DROP TABLE IF EXISTS `client_custom_prices`;
 DROP TABLE IF EXISTS `invoice_payments`;
 DROP TABLE IF EXISTS `invoice_orders`;
 DROP TABLE IF EXISTS `orders`;
@@ -380,6 +381,22 @@ CREATE TABLE `route_orders` (
     ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE `client_custom_prices` (
+  `client_id`  CHAR(36)      NOT NULL,
+  `item_id`    CHAR(36)      NOT NULL,
+  `price`      DECIMAL(10,2) NOT NULL,
+  `created_at` DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`client_id`, `item_id`),
+  KEY `idx_ccp_item` (`item_id`),
+  CONSTRAINT `fk_ccp_client`
+    FOREIGN KEY (`client_id`) REFERENCES `users` (`id`)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_ccp_item`
+    FOREIGN KEY (`item_id`) REFERENCES `items` (`id`)
+    ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Seed roles with stable UUIDs (v4 format)
 INSERT INTO `roles` (`id`, `name`) VALUES
 ('11111111-1111-4111-8111-111111111111', 'admin'),
@@ -407,15 +424,5 @@ SET SQL_MODE=@OLD_SQL_MODE;
 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
 
--- Tabla para precios personalizados (1 a 1 directo con cliente)
-CREATE TABLE `client_custom_prices` (
-  `client_id` CHAR(36) NOT NULL,
-  `item_id` CHAR(36) NOT NULL,
-  `price` DECIMAL(10,2) NOT NULL,
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`client_id`, `item_id`),
-  KEY `idx_ccp_item` (`item_id`),
-  CONSTRAINT `fk_ccp_client` FOREIGN KEY (`client_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_ccp_item` FOREIGN KEY (`item_id`) REFERENCES `items` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Seed Data:
+-- See below for seed inserts.

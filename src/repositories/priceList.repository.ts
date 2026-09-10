@@ -26,7 +26,7 @@ export class PriceListRepository {
   static async findItemsByClientId(clientId: string, connection?: PoolConnection) {
     const db = connection || pool;
     const query = `
-      SELECT ccp.item_id, ccp.price, ccp.updated_at, i.item_name
+      SELECT ccp.item_id, ccp.price, ccp.updated_at, i.name AS item_name
       FROM client_custom_prices ccp
       JOIN items i ON ccp.item_id = i.id
       WHERE ccp.client_id = ?

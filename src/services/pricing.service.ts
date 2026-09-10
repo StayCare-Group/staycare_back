@@ -21,10 +21,10 @@ export class PricingService {
   static async resolveItemPrice(clientId: string, itemId: string, quantity: number, connection?: any): Promise<ResolvedItemPrice> {
     const itemDef = await ItemRepository.findById(itemId);
     if (!itemDef) {
-      throw new AppError(`Item con ID ${itemId} no encontrado.`, 404);
+      throw new AppError(`Item with ID ${itemId} not found.`, 404);
     }
 
-    const basePrice = itemDef.price;
+    const basePrice = Number(itemDef.base_price);
     const customPriceDef = await PriceListRepository.findItemByClientAndItemId(clientId, itemId, connection);
     
     const customPrice = customPriceDef ? Number(customPriceDef.price) : null;
@@ -33,7 +33,7 @@ export class PricingService {
     return {
       item_id: itemId,
       item_code: itemDef.item_code,
-      name: itemDef.item_name,
+      name: itemDef.name,
       quantity,
       unit_price: finalPrice,
       total_price: finalPrice * quantity,
