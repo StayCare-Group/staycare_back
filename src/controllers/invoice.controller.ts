@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 import { InvoiceService } from "../services/invoice.service";
+import { InvoiceRepository } from "../repositories/invoice.repository";
 import { sendSuccess, sendError } from "../utils/response";
 import { parsePagination, paginationMeta } from "../utils/paginate";
+
 
 /**
  * @swagger
@@ -272,3 +274,120 @@ export const markOverdue = async (_req: Request, res: Response) => {
     return sendError(res, 400, error.message || "Failed to update overdue invoices");
   }
 };
+
+/**
+ * GET /api/invoices/export
+ *
+ * Downloads all invoices matching the active filters as a single CSV file.
+ * Each row represents one invoice with its financial summary (1 row per invoice).
+ * Replaces the previous pattern of N individual GET /api/invoices/:id calls.
+ *
+ * Access: admin, staff only.
+ */
+export const exportInvoices = async (req: Request, res: Response) => {
+  try {
+    const { status, client_id, from, to, search } = req.query;
+
+    const filter: { status?: string; client_id?: string; from?: string; to?: string; search?: string } = {};
+    if (status)    filter.status    = status    as string;
+    if (client_id) filter.client_id = client_id as string;
+    if (from)      filter.from      = from      as string;
+    if (to)        filter.to        = to        as string;
+    if (search)    filter.search    = search    as string;
+
+    const rows = await InvoiceRepository.findManyForExport(filter);
+
+    if (rows.length === 0) {
+      return sendError(res, 404, "No invoices found for the selected filters");
+    }
+
+    // ─── Build CSV ────────────────────────────────────────────────────────────
+    const escape = (value: unknown): string => {
+      const str = value === null || value === undefined ? "" : String(value);
+      // Wrap in quotes if the value contains commas, semicolons, quotes or newlines
+      if (str.includes(",") || str.includes(";") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const formatDate = (val: unknown): string => {
+      if (!val) return "";
+      if (val instanceof Date) {
+        if (isNaN(val.getTime())) return "";
+        return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, "0")}-${String(val.getDate()).padStart(2, "0")}`;
+      }
+      const str = String(val).trim();
+      const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (match?.[1]) return match[1];
+      const d = new Date(str);
+      if (isNaN(d.getTime())) return "";
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    };
+
+    const headers = [
+      "Invoice #",
+      "Order(s)",
+      "Client",
+      "Contact Person",
+      "Issue Date",
+      "Due Date",
+      "Status",
+      "Subtotal",
+      "VAT %",
+      "VAT Amount",
+      "Grand Total",
+      "Items",
+    ];
+
+    const csvLines: string[] = [headers.map(escape).join(",")];
+
+    for (const inv of rows) {
+      let lineItems: { description?: string; quantity?: number; unit_price?: number; total_price?: number }[] = [];
+      try {
+        const raw = typeof inv.line_items_json === "string" ? JSON.parse(inv.line_items_json) : inv.line_items_json;
+        lineItems = Array.isArray(raw) ? raw.filter(Boolean) : [];
+      } catch {
+        lineItems = [];
+      }
+
+      const itemsSummary = lineItems
+        .map((it) => {
+          const qty = it.quantity ?? 1;
+          const desc = it.description ?? "Item";
+          const price = it.total_price != null ? ` (€${Number(it.total_price).toFixed(2)})` : "";
+          return `${qty}x ${desc}${price}`;
+        })
+        .join("; ");
+
+      const row = [
+        inv.invoice_number ?? "",
+        inv.order_numbers  ?? "",
+        inv.client_name    ?? "",
+        inv.contact_person ?? "",
+        formatDate(inv.issue_date),
+        formatDate(inv.due_date),
+        inv.status         ?? "",
+        inv.subtotal       ?? 0,
+        inv.vat_percentage ?? 0,
+        inv.vat_amount     ?? 0,
+        inv.total          ?? 0,
+        itemsSummary,
+      ];
+      csvLines.push(row.map(escape).join(","));
+    }
+
+    const csv = csvLines.join("\n");
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `Facturas-StayCare-${dateStr}.csv`;
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    // BOM so Excel opens UTF-8 CSV correctly
+    return res.status(200).send("\uFEFF" + csv);
+  } catch (error: any) {
+    console.error("exportInvoices error:", error);
+    return sendError(res, 500, error.message || "Failed to export invoices");
+  }
+};
+

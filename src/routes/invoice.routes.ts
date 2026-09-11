@@ -5,12 +5,14 @@ import {
   getInvoiceById,
   recordPayment,
   markOverdue,
+  exportInvoices,
 } from "../controllers/invoice.controller";
 import { validate } from "../middleware/validate";
 import {
   createInvoiceSchema,
   recordPaymentSchema,
 } from "../validation/invoice.validation";
+
 import { authenticate } from "../middleware/authenticate";
 import { authorize } from "../middleware/authorize";
 
@@ -27,7 +29,11 @@ router.post(
 
 router.get("/", authorize("admin", "staff", "client"), getAllInvoices);
 
+// ─── Export (must come before /:id to avoid route conflict) ──────────────────
+router.get("/export", authorize("admin", "staff"), exportInvoices);
+
 router.get("/:id", authorize("admin", "staff", "client"), getInvoiceById);
+
 
 router.post(
   "/:id/payments",

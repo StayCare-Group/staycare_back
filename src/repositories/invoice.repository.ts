@@ -263,6 +263,82 @@ export class InvoiceRepository {
     return Number((rows[0] as { total: number }).total) || 0;
   }
 
+  // ─── Export (single query with line_items + orders) ───────────────────────
+
+  /**
+   * Returns all invoices matching the filter (no pagination) with their
+   * line_items and linked order numbers aggregated in a single SQL query.
+   * Intended exclusively for CSV export — do NOT use for paginated lists.
+   */
+  static async findManyForExport(
+    filter: { status?: string; client_id?: string; from?: string; to?: string; search?: string }
+  ): Promise<any[]> {
+    let where = "1=1";
+    const params: any[] = [];
+
+    if (filter.status) {
+      where += " AND i.status = ?";
+      params.push(filter.status);
+    }
+    if (filter.client_id) {
+      where += " AND i.client_id = ?";
+      params.push(filter.client_id);
+    }
+    if (filter.from) {
+      where += " AND i.issue_date >= ?";
+      params.push(filter.from);
+    }
+    if (filter.to) {
+      where += " AND i.issue_date <= ?";
+      params.push(filter.to);
+    }
+    if (filter.search) {
+      where += " AND (i.invoice_number LIKE ? OR cp.contact_person LIKE ?)";
+      const pattern = `%${filter.search}%`;
+      params.push(pattern, pattern);
+    }
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT
+         i.id,
+         i.invoice_number,
+         DATE_FORMAT(i.issue_date, '%Y-%m-%d') AS issue_date,
+         DATE_FORMAT(i.due_date, '%Y-%m-%d')   AS due_date,
+         i.status,
+         i.subtotal,
+         i.vat_percentage,
+         i.vat_amount,
+         i.total,
+         u.name              AS client_name,
+         cp.contact_person,
+         (
+           SELECT GROUP_CONCAT(DISTINCT o.order_number ORDER BY o.id SEPARATOR ', ')
+           FROM orders o
+           INNER JOIN invoice_orders io ON io.order_id = o.id
+           WHERE io.invoice_id = i.id
+         ) AS order_numbers,
+         (
+           SELECT JSON_ARRAYAGG(JSON_OBJECT(
+             'description', il.description,
+             'quantity',    il.quantity,
+             'unit_price',  il.unit_price,
+             'total_price', il.total_price
+           ))
+           FROM invoice_line_items il
+           WHERE il.invoice_id = i.id
+         ) AS line_items_json
+       FROM invoices i
+       INNER JOIN users u ON i.client_id = u.id
+       LEFT JOIN client_profiles cp ON cp.user_id = u.id
+       WHERE ${where}
+       ORDER BY i.created_at DESC
+       LIMIT 5000`,
+      params
+    );
+
+    return rows as any[];
+  }
+
   /** Suma total pagado de una factura */
   static async sumPayments(invoiceId: EntityId): Promise<number> {
     const [rows] = await pool.execute<RowDataPacket[]>(
