@@ -215,6 +215,8 @@ export class UserService {
             contact_person: profileToUpdate.contact_person ?? "",
             vat_number: profileToUpdate.vat_number ?? "",
             billing_address: profileToUpdate.billing_address ?? "",
+            credits_terms_days: profileToUpdate.credits_terms_days ?? 30,
+            pricing_tier: profileToUpdate.pricing_tier ?? "standard",
           });
         }
       }

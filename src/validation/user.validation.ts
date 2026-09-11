@@ -82,15 +82,15 @@ export const updateUserByAdminSchema = z.object({
   body: z.object({
     name: z.string().min(1).optional(),
     email: z.string().email().optional(),
-    phone: z.string().min(1).optional(),
+    phone: z.string().optional(),
     language: z.enum(["en", "es"]).optional(),
     password: z.string().min(6).optional(),
     is_active: z.boolean().optional(),
     client_profile: z
       .object({
-        contact_person: z.string().min(1).optional(),
-        vat_number: z.string().min(1).optional(),
-        billing_address: z.string().min(1).optional(),
+        contact_person: z.string().optional(),
+        vat_number: z.string().optional(),
+        billing_address: z.string().optional(),
         credits_terms_days: z.number().int().positive().optional(),
         pricing_tier: z.enum(["standard", "premium", "enterprise"]).optional(),
       })
