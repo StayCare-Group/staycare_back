@@ -290,7 +290,7 @@ export class OrderService {
 
       // Block if BOTH invoiced AND completed
       if (order.is_invoiced && order.status === OrderStatus.COMPLETED) {
-        throw new AppError("No se puede recibir o modificar una orden que ya está facturada y completada satisfactoriamente.", 403);
+        throw new AppError("Cannot receive or modify an order that is already invoiced and completed.", 403);
       }
 
       const existingItems = await OrderRepository.findItemsByOrderId(orderId);
@@ -302,7 +302,7 @@ export class OrderService {
       for (const item of data.items) {
         const sum = (item.qty_good || 0) + (item.qty_bad || 0) + (item.qty_stained || 0);
         if (sum !== item.quantity) {
-          throw new AppError(`Error en el ítem (ID: ${item.item_id}): La suma de estados (${sum}) no coincide con la cantidad total (${item.quantity}).`, 400);
+          throw new AppError(`Item quantity mismatch (ID: ${item.item_id}): The sum of conditions (${sum}) does not match the total quantity (${item.quantity}).`, 400);
         }
       }
 
@@ -366,9 +366,20 @@ export class OrderService {
     const order = await OrderRepository.findById(id);
     if (!order) throw new AppError("Order not found", 404);
 
-    // Block if BOTH invoiced AND completed
-    if (order.is_invoiced && order.status === OrderStatus.COMPLETED) {
-      throw new AppError("No se puede modificar una orden que ya está facturada y completada satisfactoriamente.", 403);
+    // Block editing if already invoiced or past quality_check
+    const NON_EDITABLE_STATUSES = new Set([
+      OrderStatus.READY_TO_DELIVERY,
+      OrderStatus.COLLECTED,
+      OrderStatus.DELIVERED,
+      OrderStatus.COMPLETED,
+      OrderStatus.CANCELLED,
+    ]);
+
+    if (order.is_invoiced || NON_EDITABLE_STATUSES.has(order.status as OrderStatus)) {
+      const reason = order.is_invoiced
+        ? "Order is already invoiced."
+        : `Order is in status '${order.status}'. Editing is only permitted up to quality_check.`;
+      throw new AppError(`Cannot modify order: ${reason}`, 400);
     }
 
     const conn = await pool.getConnection();
@@ -413,9 +424,9 @@ export class OrderService {
             quantity: item.quantity,
             unit_price: item.unit_price,
             total_price: item.total_price,
-            qty_good: sourceItem?.qty_good || 0,
-            qty_bad: sourceItem?.qty_bad || 0,
-            qty_stained: sourceItem?.qty_stained || 0,
+            qty_good: sourceItem?.qty_good !== undefined ? Number(sourceItem.qty_good) : item.quantity,
+            qty_bad: sourceItem?.qty_bad !== undefined ? Number(sourceItem.qty_bad) : 0,
+            qty_stained: sourceItem?.qty_stained !== undefined ? Number(sourceItem.qty_stained) : 0,
           });
         }
 
@@ -442,7 +453,7 @@ export class OrderService {
 
     // Block if BOTH invoiced AND completed
     if (order.is_invoiced && order.status === OrderStatus.COMPLETED) {
-      throw new AppError("No se puede cambiar el estado de una orden que ya está facturada y completada satisfactoriamente.", 403);
+      throw new AppError("Cannot change status of an order that is already invoiced and completed.", 403);
     }
 
     const STAFF_ONLY_STATUSES = new Set([

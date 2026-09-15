@@ -28,7 +28,7 @@ export class PropertyService {
     if (input.lat !== undefined && input.lng !== undefined && input.lat !== null && input.lng !== null) {
       const existing = await PropertyRepository.findByLatLng(userId, input.lat, input.lng);
       if (existing) {
-        throw new AppError("Ya existe una sede con estas coordenadas para este cliente", 409);
+        throw new AppError("A property with these coordinates already exists for this client", 409);
       }
     }
 
@@ -65,7 +65,7 @@ export class PropertyService {
     if (newLat !== null && newLng !== null) {
       const existing = await PropertyRepository.findByLatLng(prop.user_id, newLat, newLng);
       if (existing && existing.id !== propertyId) {
-        throw new AppError("Ya existe una sede con estas coordenadas para este cliente", 409);
+        throw new AppError("A property with these coordinates already exists for this client", 409);
       }
     }
 
@@ -83,7 +83,7 @@ export class PropertyService {
     // Integrity Check: Cannot delete if associated with an order
     const hasOrders = await OrderRepository.existsByPropertyId(propertyId);
     if (hasOrders) {
-      throw new AppError("No se puede eliminar la sede porque tiene órdenes asociadas. Por seguridad, el historial de sedes debe mantenerse si ya ha sido utilizado.", 400);
+      throw new AppError("Cannot delete property because it has associated orders.", 400);
     }
 
     await PropertyRepository.delete(propertyId);
