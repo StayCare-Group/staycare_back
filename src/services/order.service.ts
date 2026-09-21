@@ -12,6 +12,19 @@ import { PricingService } from "./pricing.service";
 
 const EXPRESS_SURCHARGE = 25.0;
 
+/**
+ * Ordered pipeline of in-plant processing stages.
+ * Used to detect rollback operations (moving to an earlier stage).
+ */
+const PROCESSING_PIPELINE: OrderStatus[] = [
+  OrderStatus.ARRIVED,
+  OrderStatus.WASHING,
+  OrderStatus.DRYING,
+  OrderStatus.IRONING,
+  OrderStatus.QUALITY_CHECK,
+];
+
+
 function toDateString(val: string | Date | null | undefined): string {
   if (!val) return "";
   if (typeof val === "string") {
@@ -246,7 +259,7 @@ export class OrderService {
           quantity: item.quantity,
           unit_price: item.unit_price,
           total_price: item.total_price,
-          qty_good: 0,
+          qty_good: item.quantity,
           qty_bad: 0,
           qty_stained: 0,
         });
@@ -284,6 +297,8 @@ export class OrderService {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+
+      await MachineRepository.releaseOrderByOrderId(orderId, conn);
 
       const order = await OrderRepository.findById(orderId);
       if (!order) throw new AppError("Order not found", 404);
@@ -456,6 +471,28 @@ export class OrderService {
       throw new AppError("Cannot change status of an order that is already invoiced and completed.", 403);
     }
 
+    // ── Rollback detection ────────────────────────────────────────────────────
+    // A rollback occurs when both the current and target statuses are within the
+    // processing pipeline AND the target index is earlier than the current index.
+    const currentPipelineIdx = PROCESSING_PIPELINE.indexOf(order.status as OrderStatus);
+    const targetPipelineIdx  = PROCESSING_PIPELINE.indexOf(status);
+    const isRollback =
+      currentPipelineIdx !== -1 &&
+      targetPipelineIdx  !== -1 &&
+      targetPipelineIdx  < currentPipelineIdx;
+
+    if (isRollback) {
+      // Only admin and staff can roll back processing stages
+      if (role !== "admin" && role !== "staff") {
+        throw new AppError("Only admin or staff can roll back processing stages.", 403);
+      }
+      // Invoiced orders cannot be rolled back under any circumstance
+      if (order.is_invoiced) {
+        throw new AppError("Cannot roll back a processing step on an invoiced order.", 403);
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const STAFF_ONLY_STATUSES = new Set([
       OrderStatus.WASHING,
       OrderStatus.DRYING,
@@ -471,6 +508,12 @@ export class OrderService {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+
+      // If this is a rollback, release the machine currently assigned to the order
+      // before changing the status. This runs inside the transaction.
+      if (isRollback) {
+        await MachineRepository.releaseOrderByOrderId(orderId, conn);
+      }
 
       const updateData: Partial<IOrderMySQL> = { status };
       if (specialNotes && specialNotes.trim()) {
@@ -492,7 +535,9 @@ export class OrderService {
 
       await conn.commit();
       const result = await this.getOrderById(orderId);
-      this.notifyClientOfStatus(orderId, status);
+      if (!isRollback) {
+        this.notifyClientOfStatus(orderId, status);
+      }
 
       // Automatic Invoicing if status is COMPLETED
       if (status === OrderStatus.COMPLETED) {
@@ -580,6 +625,8 @@ export class OrderService {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+
+      await MachineRepository.releaseOrderByOrderId(orderId, conn);
 
       const order = await OrderRepository.findById(orderId);
       const incomingNote = data.special_notes;
@@ -908,8 +955,22 @@ export class OrderService {
       case OrderStatus.TRANSIT:
         return this.confirmPickup(orderId, payload, userId, role);
 
-      case OrderStatus.ARRIVED:
+      case OrderStatus.ARRIVED: {
+        // If items are provided (Reception screen intake), use receiveAtFacility.
+        // If this is a rollback from a stage within the processing pipeline (washing, drying, etc.),
+        // route to updateStatus so rollback rules, validation, and machine release execute properly.
+        if (!payload.items || !Array.isArray(payload.items) || payload.items.length === 0) {
+          const order = await OrderRepository.findById(orderId);
+          if (order) {
+            const currentPipelineIdx = PROCESSING_PIPELINE.indexOf(order.status as OrderStatus);
+            const targetPipelineIdx  = PROCESSING_PIPELINE.indexOf(status);
+            if (currentPipelineIdx !== -1 && targetPipelineIdx !== -1 && targetPipelineIdx < currentPipelineIdx) {
+              return this.updateStatus(orderId, status, userId, role, payload.note, payload.special_notes);
+            }
+          }
+        }
         return this.receiveAtFacility(orderId, payload, userId, role);
+      }
 
       case OrderStatus.COLLECTED:
         return this.confirmCollection(orderId, userId, role);
