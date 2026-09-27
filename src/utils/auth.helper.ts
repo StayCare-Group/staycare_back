@@ -12,9 +12,23 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
-export const generateAuthTokens = (userId: string | number, role: UserRole): AuthTokens => {
+export const generateAuthTokens = (
+  userId: string | number,
+  role: UserRole,
+  extras?: {
+    roleId?: string | undefined;
+    parentClientId?: string | null | undefined;
+    permissions?: string[] | undefined;
+  }
+): AuthTokens => {
   const uid = userId.toString();
-  const accessToken = signAccessToken({ userId: uid, role });
+  const accessToken = signAccessToken({
+    userId: uid,
+    role,
+    roleId: extras?.roleId,
+    parentClientId: extras?.parentClientId,
+    permissions: extras?.permissions,
+  });
   const refreshToken = signRefreshToken({ userId: uid });
   
   return { accessToken, refreshToken };

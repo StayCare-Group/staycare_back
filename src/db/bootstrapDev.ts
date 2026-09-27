@@ -132,6 +132,94 @@ export async function autoInitDbForDevelopment(): Promise<void> {
         console.warn("Could not sync client_custom_prices table:", err);
       }
 
+      try {
+        const db = quoteIdentifier(config.db.database);
+        // Sync roles columns
+        try { await conn.query(`ALTER TABLE ${db}.\`roles\` ADD COLUMN \`client_id\` CHAR(36) NULL DEFAULT NULL`); } catch {}
+        try { await conn.query(`ALTER TABLE ${db}.\`roles\` ADD COLUMN \`is_system\` TINYINT(1) NOT NULL DEFAULT '0'`); } catch {}
+
+        // Sync permissions table
+        await conn.query(`
+          CREATE TABLE IF NOT EXISTS ${db}.\`permissions\` (
+            \`id\` CHAR(36) NOT NULL,
+            \`name\` VARCHAR(100) NOT NULL,
+            \`description\` VARCHAR(255) NULL DEFAULT NULL,
+            \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (\`id\`),
+            UNIQUE KEY \`uq_permissions_name\` (\`name\`)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+
+        // Sync role_permissions table
+        await conn.query(`
+          CREATE TABLE IF NOT EXISTS ${db}.\`role_permissions\` (
+            \`role_id\` CHAR(36) NOT NULL,
+            \`permission_id\` CHAR(36) NOT NULL,
+            PRIMARY KEY (\`role_id\`, \`permission_id\`),
+            KEY \`idx_rp_permission\` (\`permission_id\`),
+            CONSTRAINT \`fk_rp_role\`
+              FOREIGN KEY (\`role_id\`) REFERENCES ${db}.\`roles\` (\`id\`)
+              ON DELETE CASCADE ON UPDATE CASCADE,
+            CONSTRAINT \`fk_rp_permission\`
+              FOREIGN KEY (\`permission_id\`) REFERENCES ${db}.\`permissions\` (\`id\`)
+              ON DELETE CASCADE ON UPDATE CASCADE
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+
+        // Sync users column
+        try { await conn.query(`ALTER TABLE ${db}.\`users\` ADD COLUMN \`parent_client_id\` CHAR(36) NULL DEFAULT NULL`); } catch {}
+
+        // Seed default permissions
+        await conn.query(`
+          INSERT INTO ${db}.\`permissions\` (\`id\`, \`name\`, \`description\`) VALUES
+          ('10000000-0000-4000-8000-000000000001', 'orders:create', 'Crear órdenes'),
+          ('10000000-0000-4000-8000-000000000002', 'orders:read', 'Visualizar órdenes'),
+          ('10000000-0000-4000-8000-000000000003', 'orders:update', 'Actualizar órdenes'),
+          ('10000000-0000-4000-8000-000000000004', 'orders:delete', 'Eliminar órdenes')
+          ON DUPLICATE KEY UPDATE \`name\` = VALUES(\`name\`)
+        `);
+
+        // Seed default system roles
+        await conn.query(`
+          INSERT INTO ${db}.\`roles\` (\`id\`, \`name\`, \`client_id\`, \`is_system\`) VALUES
+          ('11111111-1111-4111-8111-111111111111', 'admin', NULL, 1),
+          ('22222222-2222-4222-8222-222222222222', 'staff', NULL, 1),
+          ('33333333-3333-4333-8333-333333333333', 'driver', NULL, 1),
+          ('44444444-4444-4444-8444-444444444444', 'client', NULL, 1),
+          ('55555555-5555-4555-8555-555555555555', 'operator', NULL, 1)
+          ON DUPLICATE KEY UPDATE \`name\` = VALUES(\`name\`), \`is_system\` = VALUES(\`is_system\`)
+        `);
+
+        // Seed client system role permissions
+        await conn.query(`
+          INSERT IGNORE INTO ${db}.\`role_permissions\` (\`role_id\`, \`permission_id\`) VALUES
+          ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000001'),
+          ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000002'),
+          ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000003'),
+          ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000004')
+        `);
+
+        // Seed bootstrap users (Password: password123)
+        await conn.query(`
+          INSERT INTO ${db}.\`users\` (\`id\`, \`name\`, \`email\`, \`password_hash\`, \`role_id\`) VALUES
+          ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'System Admin',  'admin@staycare.com',    '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', '11111111-1111-4111-8111-111111111111'),
+          ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Plant Staff',   'staff@staycare.com',    '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', '22222222-2222-4222-8222-222222222222'),
+          ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Main Driver',   'driver@staycare.com',   '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', '33333333-3333-4333-8333-333333333333'),
+          ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'Test Client',   'client@staycare.com',   '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', '44444444-4444-4444-8444-444444444444'),
+          ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'Main Operator', 'operator@staycare.com', '$2b$10$ASu3vm3RtjKb1iTyms64hOdeTET8BT5/OMwgjOyZVZxGo.1WJh94m', '55555555-5555-4555-8555-555555555555')
+          ON DUPLICATE KEY UPDATE \`email\` = VALUES(\`email\`)
+        `);
+
+        // Seed client profile for test client user
+        await conn.query(`
+          INSERT INTO ${db}.\`client_profiles\` (\`id\`, \`user_id\`, \`contact_person\`, \`vat_number\`, \`billing_address\`) VALUES
+          ('ffffffff-ffff-4fff-8fff-ffffffffffff', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'Test Client Contact', 'VAT12345678', '123 Business St, City')
+          ON DUPLICATE KEY UPDATE \`vat_number\` = VALUES(\`vat_number\`)
+        `);
+      } catch (err) {
+        console.warn("Could not sync permissions/roles/users seed data:", err);
+      }
+
       return;
     }
 

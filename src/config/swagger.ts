@@ -115,22 +115,21 @@ const options: swaggerJsdoc.Options = {
             password: { type: "string", minLength: 6 },
             is_active: { type: "boolean" },
             role_id: { type: "string", format: "uuid" },
-            tenant_id: { type: "string", format: "uuid", nullable: true },
+            parent_client_id: { type: "string", format: "uuid", nullable: true },
           },
         },
-        Tenant: {
+        SubUser: {
           type: "object",
           properties: {
             id: { type: "string", format: "uuid" },
-            name: { type: "string", description: "Nombre de la empresa (Tenant)" },
-            created_at: { type: "string", format: "date-time" },
-          },
-        },
-        TenantInput: {
-          type: "object",
-          required: ["name"],
-          properties: {
-            name: { type: "string", description: "Nombre del Tenant a crear" },
+            name: { type: "string" },
+            email: { type: "string" },
+            phone: { type: "string", nullable: true },
+            language: { type: "string", enum: ["en", "es"] },
+            role_id: { type: "string", format: "uuid" },
+            parent_client_id: { type: "string", format: "uuid" },
+            is_active: { type: "boolean" },
+            permissions: { type: "array", items: { type: "string" } },
           },
         },
         Role: {
@@ -138,7 +137,7 @@ const options: swaggerJsdoc.Options = {
           properties: {
             id: { type: "string", format: "uuid" },
             name: { type: "string" },
-            tenant_id: { type: "string", format: "uuid", nullable: true },
+            client_id: { type: "string", format: "uuid", nullable: true },
             is_system: { type: "boolean", description: "Indica si es rol base del sistema" },
           },
         },
@@ -149,8 +148,8 @@ const options: swaggerJsdoc.Options = {
             name: { type: "string", description: "Nombre del rol personalizado" },
             permissions: {
               type: "array",
-              items: { type: "string", format: "uuid" },
-              description: "Array de IDs de los permisos a asignar",
+              items: { type: "string" },
+              description: "Lista de nombres o IDs de los permisos a asignar (ej. orders:create, orders:read)",
             },
           },
         },

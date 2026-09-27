@@ -1,12 +1,15 @@
 import jwt from "jsonwebtoken";
 import { CookieOptions } from "express";
 
-export type UserRole = "admin" | "client" | "driver" | "staff" | "operator";
+export type UserRole = "admin" | "client" | "driver" | "staff" | "operator" | string;
 
 export interface AccessTokenPayload {
   userId: string;
   role: UserRole;
-  tenantId?: string;
+  roleId?: string | undefined;
+  parentClientId?: string | null | undefined;
+  permissions?: string[] | undefined;
+  tenantId?: string | undefined;
 }
 
 export interface RefreshTokenPayload {

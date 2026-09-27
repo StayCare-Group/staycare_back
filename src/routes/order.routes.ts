@@ -21,7 +21,7 @@ import {
   confirmDriverActionSchema,
 } from "../validation/order.validation";
 import { authenticate } from "../middleware/authenticate";
-import { authorize } from "../middleware/authorize";
+import { authorize, authorizePermission } from "../middleware/authorize";
 
 const router = Router();
 
@@ -35,13 +35,13 @@ router.post(
 );
 
 // ─── List & Detail ────────────────────────────────────────────────────────────
-router.get("/", getAllOrders);
-router.get("/:id", getOrderById);
+router.get("/", authorizePermission("orders:read"), getAllOrders);
+router.get("/:id", authorizePermission("orders:read"), getOrderById);
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 router.post(
   "/",
-  authorize("admin", "staff", "client"),
+  authorizePermission("orders:create"),
   validate(createOrderSchema),
   createOrder,
 );
@@ -49,7 +49,7 @@ router.post(
 // ─── Update (structural data) ─────────────────────────────────────────────────
 router.put(
   "/:id",
-  authorize("admin", "staff", "operator"),
+  authorizePermission("orders:update"),
   validate(updateOrderSchema),
   updateOrder,
 );
@@ -65,7 +65,7 @@ router.patch(
 // ─── Structural operations (no son solo cambio de estado) ────────────────────
 router.patch(
   "/:id/reschedule",
-  authorize("admin", "staff", "client"),
+  authorizePermission("orders:update"),
   validate(rescheduleOrderSchema),
   rescheduleOrder,
 );
@@ -90,6 +90,6 @@ router.patch(
 );
 
 // ─── Delete ───────────────────────────────────────────────────────────────────
-router.delete("/:id", authorize("admin"), deleteOrder);
+router.delete("/:id", authorizePermission("orders:delete"), deleteOrder);
 
 export default router;

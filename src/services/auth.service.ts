@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { UserRepository, IUserMySQL } from "../repositories/user.repository";
+import { RoleRepository } from "../repositories/role.repository";
 import { ClientProfileRepository } from "../repositories/clientProfile.repository";
 import { PasswordResetRepository } from "../repositories/passwordReset.repository";
 import { AppError } from "../utils/AppError";
@@ -77,7 +78,13 @@ export class AuthService {
       throw new AppError("Account is deactivated", 403);
     }
 
-    const tokens = generateAuthTokens(user.id!, toTokenRole(user.role!));
+    const permissions = user.role_id ? await RoleRepository.findPermissionNamesByRoleId(user.role_id) : [];
+
+    const tokens = generateAuthTokens(user.id!, toTokenRole(user.role!), {
+      roleId: user.role_id,
+      parentClientId: user.parent_client_id,
+      permissions,
+    });
     await UserRepository.updateRefreshToken(user.id!, tokens.refreshToken);
 
     return { user, tokens };
@@ -92,8 +99,13 @@ export class AuthService {
       throw new AppError("Account is deactivated", 403);
     }
 
-    const tokens = generateAuthTokens(user.id!, toTokenRole(user.role!));
-    // We only need the new access token
+    const permissions = user.role_id ? await RoleRepository.findPermissionNamesByRoleId(user.role_id) : [];
+
+    const tokens = generateAuthTokens(user.id!, toTokenRole(user.role!), {
+      roleId: user.role_id,
+      parentClientId: user.parent_client_id,
+      permissions,
+    });
 
     return { user, accessToken: tokens.accessToken };
   }

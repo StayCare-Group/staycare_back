@@ -75,8 +75,11 @@ import { OrderRepository } from "../repositories/order.repository";
  */
 export const createOrder = async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const order = await OrderService.createOrder(req.body, userId, req.user!.role);
+    const effectiveClientId = req.user!.parentClientId || req.user!.userId;
+    const isClientContext = req.user!.role === "client" || !!req.user!.parentClientId;
+    
+    const body = isClientContext ? { ...req.body, client_id: effectiveClientId } : req.body;
+    const order = await OrderService.createOrder(body, effectiveClientId, req.user!.role);
     return sendSuccess(res, 201, "Order created", order);
   } catch (error: any) {
     return sendError(res, 400, error.message || "Order creation failed");
@@ -148,9 +151,9 @@ export const getAllOrders = async (req: Request, res: Response) => {
       filter.status = status.split(",").map((s) => s.trim());
     }
 
-    // If client role, restrict client_id to the authenticated user's ID
-    if (req.user!.role === "client") {
-      filter.client_id = req.user!.userId;
+    // If client role or sub-user, restrict client_id to the effective client ID
+    if (req.user!.role === "client" || req.user!.parentClientId) {
+      filter.client_id = req.user!.parentClientId || req.user!.userId;
     }
 
     // 1. Admin: Si busca pendientes de asignación, eliminamos restricción de fecha por defecto
@@ -236,7 +239,10 @@ export const getOrderById = async (req: Request, res: Response) => {
       return sendError(res, 404, "Order not found");
     }
 
-    if (req.user!.role === "client" && String(order.client_id) !== String(req.user!.userId)) {
+    const effectiveClientId = req.user!.parentClientId || req.user!.userId;
+    const isClientContext = req.user!.role === "client" || !!req.user!.parentClientId;
+
+    if (isClientContext && String(order.client_id) !== String(effectiveClientId)) {
       return sendError(res, 403, "Forbidden");
     }
 

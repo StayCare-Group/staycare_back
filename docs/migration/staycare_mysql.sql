@@ -27,6 +27,8 @@ DROP TABLE IF EXISTS `invoices`;
 DROP TABLE IF EXISTS `invitations`;
 DROP TABLE IF EXISTS `client_profiles`;
 DROP TABLE IF EXISTS `users`;
+DROP TABLE IF EXISTS `role_permissions`;
+DROP TABLE IF EXISTS `permissions`;
 DROP TABLE IF EXISTS `roles`;
 DROP TABLE IF EXISTS `_migrations`;
 
@@ -41,9 +43,33 @@ CREATE TABLE `_migrations` (
 CREATE TABLE `roles` (
   `id` CHAR(36) NOT NULL,
   `name` VARCHAR(50) NOT NULL,
+  `client_id` CHAR(36) NULL DEFAULT NULL,
+  `is_system` TINYINT(1) NOT NULL DEFAULT '0',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_roles_name` (`name`)
+  KEY `idx_roles_client` (`client_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `permissions` (
+  `id` CHAR(36) NOT NULL,
+  `name` VARCHAR(100) NOT NULL,
+  `description` VARCHAR(255) NULL DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_permissions_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `role_permissions` (
+  `role_id` CHAR(36) NOT NULL,
+  `permission_id` CHAR(36) NOT NULL,
+  PRIMARY KEY (`role_id`, `permission_id`),
+  KEY `idx_rp_permission` (`permission_id`),
+  CONSTRAINT `fk_rp_role`
+    FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_rp_permission`
+    FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`)
+    ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `users` (
@@ -54,6 +80,7 @@ CREATE TABLE `users` (
   `phone` VARCHAR(30) NULL DEFAULT NULL,
   `language` ENUM('en', 'es') NOT NULL DEFAULT 'en',
   `role_id` CHAR(36) NOT NULL,
+  `parent_client_id` CHAR(36) NULL DEFAULT NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT '1',
   `refresh_token` VARCHAR(512) NULL DEFAULT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -62,10 +89,19 @@ CREATE TABLE `users` (
   UNIQUE KEY `uq_users_email` (`email`),
   UNIQUE KEY `uq_users_phone` (`phone`),
   KEY `idx_users_role` (`role_id`),
+  KEY `idx_users_parent_client` (`parent_client_id`),
   CONSTRAINT `fk_users_role`
     FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`)
-    ON DELETE RESTRICT ON UPDATE CASCADE
+    ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_users_parent_client`
+    FOREIGN KEY (`parent_client_id`) REFERENCES `users` (`id`)
+    ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE `roles`
+  ADD CONSTRAINT `fk_roles_client`
+    FOREIGN KEY (`client_id`) REFERENCES `users` (`id`)
+    ON DELETE CASCADE ON UPDATE CASCADE;
 
 CREATE TABLE `client_profiles` (
   `id` CHAR(36) NOT NULL,
@@ -240,7 +276,6 @@ CREATE TABLE `items` (
   UNIQUE KEY `uq_items_code` (`item_code`),
   KEY `idx_items_is_active` (`is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `machines` (
   `id` CHAR(36) NOT NULL,
@@ -397,14 +432,30 @@ CREATE TABLE `client_custom_prices` (
     ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Seed roles with stable UUIDs (v4 format)
-INSERT INTO `roles` (`id`, `name`) VALUES
-('11111111-1111-4111-8111-111111111111', 'admin'),
-('22222222-2222-4222-8222-222222222222', 'staff'),
-('33333333-3333-4333-8333-333333333333', 'driver'),
-('44444444-4444-4444-8444-444444444444', 'client'),
-('55555555-5555-4555-8555-555555555555', 'operator')
+-- Seed permissions
+INSERT INTO `permissions` (`id`, `name`, `description`) VALUES
+('10000000-0000-4000-8000-000000000001', 'orders:create', 'Crear órdenes'),
+('10000000-0000-4000-8000-000000000002', 'orders:read', 'Visualizar órdenes'),
+('10000000-0000-4000-8000-000000000003', 'orders:update', 'Actualizar órdenes'),
+('10000000-0000-4000-8000-000000000004', 'orders:delete', 'Eliminar órdenes')
 ON DUPLICATE KEY UPDATE name = VALUES(name);
+
+-- Seed roles with stable UUIDs (v4 format)
+INSERT INTO `roles` (`id`, `name`, `client_id`, `is_system`) VALUES
+('11111111-1111-4111-8111-111111111111', 'admin', NULL, 1),
+('22222222-2222-4222-8222-222222222222', 'staff', NULL, 1),
+('33333333-3333-4333-8333-333333333333', 'driver', NULL, 1),
+('44444444-4444-4444-8444-444444444444', 'client', NULL, 1),
+('55555555-5555-4555-8555-555555555555', 'operator', NULL, 1)
+ON DUPLICATE KEY UPDATE name = VALUES(name), is_system = VALUES(is_system);
+
+-- Seed role_permissions for client system role
+INSERT INTO `role_permissions` (`role_id`, `permission_id`) VALUES
+('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000001'),
+('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000002'),
+('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000003'),
+('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000004')
+ON DUPLICATE KEY UPDATE role_id = VALUES(role_id);
 
 -- Bootstrap users (Password: password123)
 INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role_id`) VALUES
