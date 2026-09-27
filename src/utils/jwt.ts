@@ -6,6 +6,7 @@ export type UserRole = "admin" | "client" | "driver" | "staff" | "operator";
 export interface AccessTokenPayload {
   userId: string;
   role: UserRole;
+  tenantId?: string;
 }
 
 export interface RefreshTokenPayload {

@@ -15,6 +15,7 @@ import routeRoutes from "./routes/route.routes";
 import machineRoutes from "./routes/machine.routes";
 import invitationRoutes from "./routes/invitation.routes";
 import reportRoutes from "./routes/report.routes";
+import tenantRoutes from "./routes/tenant.routes";
 
 import { errorHandler } from "./middleware/errorHandler";
 import swaggerUi from "swagger-ui-express";
@@ -50,6 +51,7 @@ app.use("/api/routes", routeRoutes);
 app.use("/api/machines", machineRoutes);
 app.use("/api/invitations", invitationRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/tenants", tenantRoutes);
 
 app.use(errorHandler);
 

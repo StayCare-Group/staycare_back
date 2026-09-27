@@ -114,6 +114,52 @@ const options: swaggerJsdoc.Options = {
             language: { type: "string", enum: ["en", "es"] },
             password: { type: "string", minLength: 6 },
             is_active: { type: "boolean" },
+            role_id: { type: "string", format: "uuid" },
+            tenant_id: { type: "string", format: "uuid", nullable: true },
+          },
+        },
+        Tenant: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            name: { type: "string", description: "Nombre de la empresa (Tenant)" },
+            created_at: { type: "string", format: "date-time" },
+          },
+        },
+        TenantInput: {
+          type: "object",
+          required: ["name"],
+          properties: {
+            name: { type: "string", description: "Nombre del Tenant a crear" },
+          },
+        },
+        Role: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            name: { type: "string" },
+            tenant_id: { type: "string", format: "uuid", nullable: true },
+            is_system: { type: "boolean", description: "Indica si es rol base del sistema" },
+          },
+        },
+        CustomRoleInput: {
+          type: "object",
+          required: ["name", "permissions"],
+          properties: {
+            name: { type: "string", description: "Nombre del rol personalizado" },
+            permissions: {
+              type: "array",
+              items: { type: "string", format: "uuid" },
+              description: "Array de IDs de los permisos a asignar",
+            },
+          },
+        },
+        Permission: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            name: { type: "string", description: "Ej. orders:read" },
+            description: { type: "string" },
           },
         },
       },
