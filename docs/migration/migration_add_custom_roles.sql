@@ -1,20 +1,18 @@
--- Migration script for Production Databases
+-- Migration script for MySQL 8.0 Production Databases
 -- Safely adds custom roles, permissions, and sub-user fields without destroying existing data.
 
-SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0;
 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;
 
--- 1. Add client_id and is_system columns to roles table if not present
+-- 1. Add client_id and is_system columns to roles table
 ALTER TABLE `roles`
-  ADD COLUMN IF NOT EXISTS `client_id` CHAR(36) NULL DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS `is_system` TINYINT(1) NOT NULL DEFAULT '0';
+  ADD COLUMN `client_id` CHAR(36) NULL DEFAULT NULL,
+  ADD COLUMN `is_system` TINYINT(1) NOT NULL DEFAULT 0;
 
--- Add index and FK for client_id on roles
-SET @exist_fk_roles_client = (SELECT COUNT(*) FROM information_schema.table_constraints WHERE constraint_schema = DATABASE() AND constraint_name = 'fk_roles_client');
-SET @sql_fk_roles_client = IF(@exist_fk_roles_client = 0, 'ALTER TABLE `roles` ADD CONSTRAINT `fk_roles_client` FOREIGN KEY (`client_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;', 'SELECT 1;');
-PREPARE stmt FROM @sql_fk_roles_client;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- Add FK for client_id on roles
+ALTER TABLE `roles`
+  ADD CONSTRAINT `fk_roles_client`
+  FOREIGN KEY (`client_id`) REFERENCES `users` (`id`)
+  ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- Mark existing roles (admin, staff, driver, client, operator) as system roles
 UPDATE `roles` SET `is_system` = 1 WHERE `client_id` IS NULL;
@@ -45,30 +43,31 @@ CREATE TABLE IF NOT EXISTS `role_permissions` (
 
 -- 4. Add parent_client_id column to users table
 ALTER TABLE `users`
-  ADD COLUMN IF NOT EXISTS `parent_client_id` CHAR(36) NULL DEFAULT NULL;
+  ADD COLUMN `parent_client_id` CHAR(36) NULL DEFAULT NULL;
 
 -- Add FK for parent_client_id on users
-SET @exist_fk_users_parent = (SELECT COUNT(*) FROM information_schema.table_constraints WHERE constraint_schema = DATABASE() AND constraint_name = 'fk_users_parent_client');
-SET @sql_fk_users_parent = IF(@exist_fk_users_parent = 0, 'ALTER TABLE `users` ADD CONSTRAINT `fk_users_parent_client` FOREIGN KEY (`parent_client_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;', 'SELECT 1;');
-PREPARE stmt FROM @sql_fk_users_parent;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+ALTER TABLE `users`
+  ADD CONSTRAINT `fk_users_parent_client`
+  FOREIGN KEY (`parent_client_id`) REFERENCES `users` (`id`)
+  ON DELETE CASCADE ON UPDATE CASCADE;
 
--- 5. Seed default order permissions
+-- 5. Seed default permissions (orders and invoices)
 INSERT INTO `permissions` (`id`, `name`, `description`) VALUES
 ('10000000-0000-4000-8000-000000000001', 'orders:create', 'Crear órdenes'),
 ('10000000-0000-4000-8000-000000000002', 'orders:read', 'Visualizar órdenes'),
 ('10000000-0000-4000-8000-000000000003', 'orders:update', 'Actualizar órdenes'),
-('10000000-0000-4000-8000-000000000004', 'orders:delete', 'Eliminar órdenes')
-ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
+('10000000-0000-4000-8000-000000000004', 'orders:delete', 'Eliminar órdenes'),
+('10000000-0000-4000-8000-000000000005', 'invoices:read', 'Visualizar facturas'),
+('10000000-0000-4000-8000-000000000006', 'invoices:export', 'Exportar facturas')
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `description` = VALUES(`description`);
 
 -- 6. Assign default permissions to client system role ('44444444-4444-4444-8444-444444444444')
 INSERT IGNORE INTO `role_permissions` (`role_id`, `permission_id`) VALUES
 ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000001'),
 ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000002'),
 ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000003'),
-('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000004');
+('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000004'),
+('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000005'),
+('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000006');
 
-SET SQL_MODE=@OLD_SQL_MODE;
 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
-SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;

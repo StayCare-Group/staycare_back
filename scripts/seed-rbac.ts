@@ -18,14 +18,12 @@ async function seedRBAC() {
 
     // 1. Catalog of Permissions
     const permissions = [
-      { id: uuidv4(), name: "orders:read", description: "View orders" },
-      { id: uuidv4(), name: "orders:create", description: "Create orders" },
-      { id: uuidv4(), name: "orders:update", description: "Update orders" },
-      { id: uuidv4(), name: "orders:delete", description: "Delete orders" },
-      { id: uuidv4(), name: "invoices:read", description: "View invoices" },
-      { id: uuidv4(), name: "invoices:create", description: "Create invoices" },
-      { id: uuidv4(), name: "users:read", description: "View child users" },
-      { id: uuidv4(), name: "users:create", description: "Create child users" },
+      { id: uuidv4(), name: "orders:read", description: "Visualizar órdenes" },
+      { id: uuidv4(), name: "orders:create", description: "Crear órdenes" },
+      { id: uuidv4(), name: "orders:update", description: "Actualizar órdenes" },
+      { id: uuidv4(), name: "orders:delete", description: "Eliminar órdenes" },
+      { id: uuidv4(), name: "invoices:read", description: "Visualizar facturas" },
+      { id: uuidv4(), name: "invoices:export", description: "Exportar facturas" },
     ];
 
     console.log("Inserting permissions...");

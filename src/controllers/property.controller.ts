@@ -32,15 +32,21 @@ import { AppError } from "../utils/AppError";
 export const getUserProperties = async (req: Request, res: Response) => {
   try {
     const rawId = req.params.userId as string;
+    const effectiveClientId = req.user!.parentClientId ?? req.user!.userId;
     let userId: string;
 
     if (rawId === "me") {
-      userId = req.user!.userId;
+      userId = effectiveClientId;
     } else {
       userId = rawId;
 
-      // Permission check: if not admin or staff, can only see their own properties
-      if (req.user!.role !== "admin" && req.user!.role !== "staff" && userId !== req.user!.userId) {
+      // Permission check: if not admin or staff, can only see their own properties or parent client properties
+      if (
+        req.user!.role !== "admin" &&
+        req.user!.role !== "staff" &&
+        userId !== req.user!.userId &&
+        userId !== effectiveClientId
+      ) {
         return sendError(res, 403, "Forbidden: You can only view your own properties");
       }
     }
@@ -75,15 +81,20 @@ export const getUserProperties = async (req: Request, res: Response) => {
 export const addProperty = async (req: Request, res: Response) => {
   try {
     const idParam = (req.params.userId || "me") as string;
+    const effectiveClientId = req.user!.parentClientId ?? req.user!.userId;
     let userId: string;
 
     if (idParam === "me") {
-      userId = req.user!.userId;
+      userId = effectiveClientId;
     } else {
       userId = idParam;
 
-      // Permission check: only admin can add property to other users
-      if (req.user!.role !== "admin" && userId !== req.user!.userId) {
+      // Permission check: only admin can add property to other users, or client/sub-user for their own client
+      if (
+        req.user!.role !== "admin" &&
+        userId !== req.user!.userId &&
+        userId !== effectiveClientId
+      ) {
         return sendError(res, 403, "Forbidden");
       }
     }

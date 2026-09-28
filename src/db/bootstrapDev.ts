@@ -175,8 +175,10 @@ export async function autoInitDbForDevelopment(): Promise<void> {
           ('10000000-0000-4000-8000-000000000001', 'orders:create', 'Crear órdenes'),
           ('10000000-0000-4000-8000-000000000002', 'orders:read', 'Visualizar órdenes'),
           ('10000000-0000-4000-8000-000000000003', 'orders:update', 'Actualizar órdenes'),
-          ('10000000-0000-4000-8000-000000000004', 'orders:delete', 'Eliminar órdenes')
-          ON DUPLICATE KEY UPDATE \`name\` = VALUES(\`name\`)
+          ('10000000-0000-4000-8000-000000000004', 'orders:delete', 'Eliminar órdenes'),
+          ('10000000-0000-4000-8000-000000000005', 'invoices:read', 'Visualizar facturas'),
+          ('10000000-0000-4000-8000-000000000006', 'invoices:export', 'Exportar facturas')
+          ON DUPLICATE KEY UPDATE \`name\` = VALUES(\`name\`), \`description\` = VALUES(\`description\`)
         `);
 
         // Seed default system roles
@@ -196,7 +198,9 @@ export async function autoInitDbForDevelopment(): Promise<void> {
           ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000001'),
           ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000002'),
           ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000003'),
-          ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000004')
+          ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000004'),
+          ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000005'),
+          ('44444444-4444-4444-8444-444444444444', '10000000-0000-4000-8000-000000000006')
         `);
 
         // Seed bootstrap users (Password: password123)

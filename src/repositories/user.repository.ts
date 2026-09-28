@@ -151,6 +151,14 @@ export class UserRepository {
     await pool.execute("DELETE FROM users WHERE id = ?", [id]);
   }
 
+  static async countByRoleId(roleId: EntityId): Promise<number> {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      "SELECT COUNT(*) AS total FROM users WHERE role_id = ?",
+      [roleId]
+    );
+    return Number((rows[0] as { total: number }).total) || 0;
+  }
+
   static async findManyFiltered(
     filter: { role?: string; is_active?: boolean; search?: string },
     limit: number,

@@ -18,34 +18,20 @@ describe("RoleService", () => {
   describe("getClientRoles", () => {
     it("throws if client not found", async () => {
       vi.mocked(UserRepository.findById).mockResolvedValueOnce(null);
-      await expect(RoleService.getClientRoles("client-1", false)).rejects.toThrow(/Client not found/);
+      await expect(RoleService.getClientRoles("client-1")).rejects.toThrow(/Client not found/);
     });
 
-    it("returns custom roles only if includeSystemRoles is false", async () => {
+    it("returns custom roles for the client", async () => {
       vi.mocked(UserRepository.findById).mockResolvedValueOnce({ id: "client-1" } as any);
       vi.mocked(RoleRepository.findCustomRolesForClient).mockResolvedValueOnce([
         { id: "role-1", name: "Custom Role 1" } as any
       ]);
       vi.mocked(RoleRepository.findPermissionsByRoleId).mockResolvedValueOnce([]);
 
-      const result = await RoleService.getClientRoles("client-1", false);
+      const result = await RoleService.getClientRoles("client-1");
       expect(RoleRepository.findCustomRolesForClient).toHaveBeenCalledWith("client-1");
-      expect(RoleRepository.findRolesForClient).not.toHaveBeenCalled();
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe("Custom Role 1");
-    });
-
-    it("returns system and custom roles if includeSystemRoles is true", async () => {
-      vi.mocked(UserRepository.findById).mockResolvedValueOnce({ id: "client-1" } as any);
-      vi.mocked(RoleRepository.findRolesForClient).mockResolvedValueOnce([
-        { id: "role-1", name: "System Role 1" } as any,
-        { id: "role-2", name: "Custom Role 1" } as any
-      ]);
-      vi.mocked(RoleRepository.findPermissionsByRoleId).mockResolvedValue([]);
-
-      const result = await RoleService.getClientRoles("client-1", true);
-      expect(RoleRepository.findRolesForClient).toHaveBeenCalledWith("client-1");
-      expect(result).toHaveLength(2);
     });
   });
 
@@ -68,6 +54,7 @@ describe("RoleService", () => {
       };
       vi.mocked(pool.getConnection).mockResolvedValueOnce(mockConn as any);
       vi.mocked(RoleRepository.insertCustomRole).mockResolvedValueOnce("new-role-id");
+      vi.mocked(RoleRepository.findById).mockResolvedValueOnce({ id: "new-role-id", name: "New Role" } as any);
 
       const result = await RoleService.createCustomRole("client-1", { name: "New Role", permissions: ["perm-1"] });
       

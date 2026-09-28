@@ -6,9 +6,17 @@ import { sendSuccess, sendError } from "../utils/response";
 import { parsePagination, paginationMeta } from "../utils/paginate";
 import { AppError } from "../utils/AppError";
 
-function ensureClientAccess(reqUser: Express.Request["user"], targetClientId: string) {
+function ensureClientAccess(
+  reqUser: Express.Request["user"],
+  targetClientId: string,
+  options?: { requireOwner?: boolean }
+) {
   if (!reqUser) throw new AppError("Authentication required", 401);
   if (reqUser.role === "admin" || reqUser.role === "staff") return;
+
+  if (options?.requireOwner && reqUser.parentClientId) {
+    throw new AppError("Forbidden: Sub-users cannot manage client roles or team members", 403);
+  }
 
   const effectiveClientId = reqUser.parentClientId || reqUser.userId;
   if (String(effectiveClientId) !== String(targetClientId)) {
@@ -104,7 +112,7 @@ export const getClientById = async (req: Request, res: Response) => {
 export const updateClient = async (req: Request, res: Response) => {
   try {
     const clientId = req.params.id as string;
-    ensureClientAccess(req.user, clientId);
+    ensureClientAccess(req.user, clientId, { requireOwner: true });
 
     await UserService.updateClientProfile(clientId, req.body);
     return sendSuccess(res, 200, "Client updated");
@@ -150,8 +158,7 @@ export const getClientRoles = async (req: Request, res: Response) => {
     const clientId = req.params.id as string;
     ensureClientAccess(req.user, clientId);
 
-    const includeSystemRoles = req.user?.role === "admin" || req.user?.role === "staff";
-    const roles = await RoleService.getClientRoles(clientId, includeSystemRoles);
+    const roles = await RoleService.getClientRoles(clientId);
     return sendSuccess(res, 200, "Client roles retrieved successfully", roles);
   } catch (error: unknown) {
     if (error instanceof AppError) return sendError(res, error.statusCode, error.message);
@@ -199,7 +206,7 @@ export const getClientRoles = async (req: Request, res: Response) => {
 export const createCustomRole = async (req: Request, res: Response) => {
   try {
     const clientId = req.params.id as string;
-    ensureClientAccess(req.user, clientId);
+    ensureClientAccess(req.user, clientId, { requireOwner: true });
 
     const role = await RoleService.createCustomRole(clientId, req.body);
     return sendSuccess(res, 201, "Custom role created successfully", role);
@@ -243,7 +250,7 @@ export const updateCustomRole = async (req: Request, res: Response) => {
   try {
     const clientId = req.params.id as string;
     const roleId = req.params.roleId as string;
-    ensureClientAccess(req.user, clientId);
+    ensureClientAccess(req.user, clientId, { requireOwner: true });
 
     const updated = await RoleService.updateCustomRole(clientId, roleId, req.body);
     return sendSuccess(res, 200, "Custom role updated successfully", updated);
@@ -280,7 +287,7 @@ export const deleteCustomRole = async (req: Request, res: Response) => {
   try {
     const clientId = req.params.id as string;
     const roleId = req.params.roleId as string;
-    ensureClientAccess(req.user, clientId);
+    ensureClientAccess(req.user, clientId, { requireOwner: true });
 
     await RoleService.deleteCustomRole(clientId, roleId);
     return sendSuccess(res, 200, "Custom role deleted successfully");
@@ -413,7 +420,7 @@ export const getClientSubUserById = async (req: Request, res: Response) => {
 export const createClientSubUser = async (req: Request, res: Response) => {
   try {
     const clientId = req.params.id as string;
-    ensureClientAccess(req.user, clientId);
+    ensureClientAccess(req.user, clientId, { requireOwner: true });
 
     const user = await ClientSubUserService.createSubUser(clientId, req.body);
     return sendSuccess(res, 201, "Sub-user created successfully", user);
@@ -462,7 +469,7 @@ export const updateClientSubUser = async (req: Request, res: Response) => {
   try {
     const clientId = req.params.id as string;
     const subUserId = req.params.subUserId as string;
-    ensureClientAccess(req.user, clientId);
+    ensureClientAccess(req.user, clientId, { requireOwner: true });
 
     const updated = await ClientSubUserService.updateSubUser(clientId, subUserId, req.body);
     return sendSuccess(res, 200, "Sub-user updated successfully", updated);
@@ -497,7 +504,7 @@ export const deleteClientSubUser = async (req: Request, res: Response) => {
   try {
     const clientId = req.params.id as string;
     const subUserId = req.params.subUserId as string;
-    ensureClientAccess(req.user, clientId);
+    ensureClientAccess(req.user, clientId, { requireOwner: true });
 
     await ClientSubUserService.deleteSubUser(clientId, subUserId);
     return sendSuccess(res, 200, "Sub-user deleted successfully");

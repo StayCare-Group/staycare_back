@@ -6,16 +6,25 @@ import { duplicateEntryMessage } from "../utils/mysqlErrors";
 import type { EntityId } from "../utils/id";
 
 export class PropertyService {
+  private static async resolveTargetClientId(userId: EntityId): Promise<EntityId> {
+    const user = await UserRepository.findById(userId);
+    return user?.parent_client_id ?? userId;
+  }
+
   static async listByUserId(userId: EntityId): Promise<IPropertyRow[]> {
-    return await PropertyRepository.listByUserId(userId);
+    const targetUserId = await this.resolveTargetClientId(userId);
+    return await PropertyRepository.listByUserId(targetUserId);
   }
 
   static async getById(id: EntityId, userId?: EntityId): Promise<IPropertyRow> {
     const prop = await PropertyRepository.findById(id);
     if (!prop) throw new AppError("Property not found", 404);
     
-    if (userId && prop.user_id !== userId) {
-      throw new AppError("Forbidden", 403);
+    if (userId) {
+      const targetUserId = await this.resolveTargetClientId(userId);
+      if (prop.user_id !== userId && prop.user_id !== targetUserId) {
+        throw new AppError("Forbidden", 403);
+      }
     }
     return prop;
   }
@@ -24,9 +33,11 @@ export class PropertyService {
     userId: EntityId,
     input: Omit<PropertyInsertInput, "user_id">
   ): Promise<IPropertyRow | null> {
+    const targetUserId = await this.resolveTargetClientId(userId);
+
     // Check for duplicates by lat/lng
     if (input.lat !== undefined && input.lng !== undefined && input.lat !== null && input.lng !== null) {
-      const existing = await PropertyRepository.findByLatLng(userId, input.lat, input.lng);
+      const existing = await PropertyRepository.findByLatLng(targetUserId, input.lat, input.lng);
       if (existing) {
         throw new AppError("A property with these coordinates already exists for this client", 409);
       }
@@ -34,7 +45,7 @@ export class PropertyService {
 
     try {
       const row: PropertyInsertInput = {
-        user_id: userId,
+        user_id: targetUserId,
         ...input,
       };
       const id = await PropertyRepository.insert(null, row);
@@ -54,8 +65,11 @@ export class PropertyService {
     const prop = await PropertyRepository.findById(propertyId);
     if (!prop) throw new AppError("Property not found", 404);
 
-    if (userId && prop.user_id !== userId) {
-      throw new AppError("Forbidden", 403);
+    if (userId) {
+      const targetUserId = await this.resolveTargetClientId(userId);
+      if (prop.user_id !== userId && prop.user_id !== targetUserId) {
+        throw new AppError("Forbidden", 403);
+      }
     }
 
     // Check for duplicates by lat/lng if coordinates are changing
@@ -76,8 +90,11 @@ export class PropertyService {
     const prop = await PropertyRepository.findById(propertyId);
     if (!prop) throw new AppError("Property not found", 404);
 
-    if (userId && prop.user_id !== userId) {
-      throw new AppError("Forbidden", 403);
+    if (userId) {
+      const targetUserId = await this.resolveTargetClientId(userId);
+      if (prop.user_id !== userId && prop.user_id !== targetUserId) {
+        throw new AppError("Forbidden", 403);
+      }
     }
 
     // Integrity Check: Cannot delete if associated with an order

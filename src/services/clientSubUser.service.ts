@@ -75,8 +75,8 @@ export class ClientSubUserService {
     const role = await RoleRepository.findById(data.role_id);
     if (!role) throw new AppError("Role not found", 404);
 
-    if (!role.is_system && String(role.client_id) !== String(clientId)) {
-      throw new AppError("Invalid role for this client", 403);
+    if (role.is_system || String(role.client_id) !== String(clientId)) {
+      throw new AppError("Invalid role. Sub-users can only be assigned custom roles belonging to this client", 400);
     }
 
     // Check duplicate email / phone
@@ -130,8 +130,8 @@ export class ClientSubUserService {
     if (data.role_id) {
       const role = await RoleRepository.findById(data.role_id);
       if (!role) throw new AppError("Role not found", 404);
-      if (!role.is_system && String(role.client_id) !== String(clientId)) {
-        throw new AppError("Invalid role for this client", 403);
+      if (role.is_system || String(role.client_id) !== String(clientId)) {
+        throw new AppError("Invalid role. Sub-users can only be assigned custom roles belonging to this client", 400);
       }
     }
 

@@ -15,13 +15,11 @@ export class RoleService {
     return await PermissionRepository.findAll();
   }
 
-  static async getClientRoles(clientId: EntityId, includeSystemRoles: boolean = false): Promise<IRoleWithPermissions[]> {
+  static async getClientRoles(clientId: EntityId): Promise<IRoleWithPermissions[]> {
     const clientUser = await UserRepository.findById(clientId);
     if (!clientUser) throw new AppError("Client not found", 404);
 
-    const roles = includeSystemRoles 
-      ? await RoleRepository.findRolesForClient(clientId)
-      : await RoleRepository.findCustomRolesForClient(clientId);
+    const roles = await RoleRepository.findCustomRolesForClient(clientId);
     const result: IRoleWithPermissions[] = [];
 
     for (const r of roles) {
@@ -127,8 +125,8 @@ export class RoleService {
       throw new AppError("Custom role not found for this client", 404);
     }
 
-    // Check if users are assigned to this role
-    const total = await UserRepository.countFiltered({ role: existing.name });
+    // Check if users are assigned to this role (by role_id to avoid name collisions)
+    const total = await UserRepository.countByRoleId(roleId);
     if (total > 0) {
       throw new AppError("Cannot delete role assigned to active users", 409);
     }

@@ -165,10 +165,13 @@ export class UserService {
     let client_profile: IClientProfileRow | null = null;
     let properties: IPropertyRow[] | null = null;
 
-    if (user.role === "client") {
-      client_profile = await ClientProfileRepository.findByUserId(user.id!);
+    const targetClientId = user.parent_client_id ?? user.id!;
+    const isClientOrSubuser = user.role === "client" || !!user.parent_client_id;
+
+    if (isClientOrSubuser) {
+      client_profile = await ClientProfileRepository.findByUserId(targetClientId);
       if (client_profile?.id) {
-        properties = await PropertyRepository.listByUserId(user.id!);
+        properties = await PropertyRepository.listByUserId(targetClientId);
       }
     }
 
