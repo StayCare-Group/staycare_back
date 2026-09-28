@@ -377,24 +377,59 @@ export class OrderService {
     }
   }
 
-  static async updateOrder(id: string, data: any, userId: string) {
+  static async updateOrder(id: string, data: any, userId: string, role?: string, parentClientId?: string | null) {
     const order = await OrderRepository.findById(id);
     if (!order) throw new AppError("Order not found", 404);
 
-    // Block editing if already invoiced or past quality_check
+    const isAdminOrStaff = role === "admin" || role === "staff";
+    const effectiveClientId = parentClientId ?? userId;
+    const isClientContext = role === "client" || !!parentClientId;
+
+    if (role && !isAdminOrStaff) {
+      if (isClientContext && String(order.client_id) !== String(effectiveClientId)) {
+        throw new AppError("Forbidden: You can only edit orders belonging to your client account.", 403);
+      }
+    }
+
+    if (order.is_invoiced) {
+      throw new AppError("Cannot modify order: Order is already invoiced.", 400);
+    }
+
+    const statusRaw = String(order.status || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+
+    // Pre-receive statuses allowed for clients / sub-users
+    const PRE_RECEIVE_STATUSES = new Set([
+      OrderStatus.PENDING,
+      OrderStatus.ASSIGNED,
+      OrderStatus.RESCHEDULED,
+      OrderStatus.TRANSIT,
+      "pending",
+      "assigned",
+      "rescheduled",
+      "transit",
+      "in_transit",
+    ]);
+
+    if (role && !isAdminOrStaff && !PRE_RECEIVE_STATUSES.has(statusRaw as any)) {
+      throw new AppError("Cannot modify order: Once the order has been received at the facility, editing is restricted to admin and staff.", 400);
+    }
+
+    // Block editing for admin/staff if past quality_check
     const NON_EDITABLE_STATUSES = new Set([
       OrderStatus.READY_TO_DELIVERY,
       OrderStatus.COLLECTED,
       OrderStatus.DELIVERED,
       OrderStatus.COMPLETED,
       OrderStatus.CANCELLED,
+      "ready_to_delivery",
+      "collected",
+      "delivered",
+      "completed",
+      "cancelled",
     ]);
 
-    if (order.is_invoiced || NON_EDITABLE_STATUSES.has(order.status as OrderStatus)) {
-      const reason = order.is_invoiced
-        ? "Order is already invoiced."
-        : `Order is in status '${order.status}'. Editing is only permitted up to quality_check.`;
-      throw new AppError(`Cannot modify order: ${reason}`, 400);
+    if (NON_EDITABLE_STATUSES.has(statusRaw as any)) {
+      throw new AppError(`Cannot modify order: Order is in status '${order.status}'. Editing is only permitted up to quality_check.`, 400);
     }
 
     const conn = await pool.getConnection();
@@ -985,14 +1020,19 @@ export class OrderService {
     }
   }
 
-  static async deleteOrder(id: string, userId: string, role: string) {
-    if (role !== "admin") {
-      throw new AppError("Forbidden: Only administrators can delete or cancel orders.", 403);
-    }
-
+  static async deleteOrder(id: string, userId: string, role: string, parentClientId?: string | null) {
     const order = await OrderRepository.findById(id);
     if (!order) {
       throw new AppError("Order not found", 404);
+    }
+
+    const effectiveClientId = parentClientId ?? userId;
+    const isClientContext = role === "client" || !!parentClientId;
+
+    if (role !== "admin" && role !== "staff") {
+      if (isClientContext && String(order.client_id) !== String(effectiveClientId)) {
+        throw new AppError("Forbidden: You can only cancel orders belonging to your client account.", 403);
+      }
     }
 
     if (order.is_invoiced) {
@@ -1017,7 +1057,7 @@ export class OrderService {
 
     if (!ALLOWED_CANCEL_STATUSES.has(statusRaw as any)) {
       throw new AppError(
-        `Cannot cancel order in status '${order.status}'. Only pending or assigned orders can be cancelled by admin.`,
+        `Cannot cancel order in status '${order.status}'. Only pending or assigned orders can be cancelled.`,
         400
       );
     }
@@ -1037,7 +1077,7 @@ export class OrderService {
         changed_by_user_id: userId,
         is_system: false,
         status: OrderStatus.CANCELLED,
-        note: "Order cancelled by admin",
+        note: role === "admin" ? "Order cancelled by admin" : "Order cancelled by client",
       });
 
       await conn.commit();

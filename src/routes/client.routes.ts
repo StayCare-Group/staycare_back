@@ -4,9 +4,21 @@ import {
   getClientById,
   updateClient,
   deleteClient,
+  getAllPermissions,
+  getClientRoles,
+  createCustomRole,
+  updateCustomRole,
+  deleteCustomRole,
+  getClientSubUsers,
+  getClientSubUserById,
+  createClientSubUser,
+  updateClientSubUser,
+  deleteClientSubUser,
 } from "../controllers/client.controller";
 import { validate } from "../middleware/validate";
 import { updateClientSchema } from "../validation/client.validation";
+import { createCustomRoleSchema, updateCustomRoleSchema } from "../validation/role.validation";
+import { createSubUserSchema, updateSubUserSchema } from "../validation/subUser.validation";
 import { authenticate } from "../middleware/authenticate";
 import { authorize } from "../middleware/authorize";
 
@@ -14,6 +26,10 @@ const router = Router();
 
 router.use(authenticate);
 
+// ─── Permissions ──────────────────────────────────────────────────────────────
+router.get("/permissions", authorize("admin", "staff", "client"), getAllPermissions);
+
+// ─── Base Client CRUD ─────────────────────────────────────────────────────────
 router.get("/", authorize("admin", "staff"), getAllClients);
 router.get("/:id", authorize("admin", "staff", "client"), getClientById);
 router.put(
@@ -23,6 +39,19 @@ router.put(
   updateClient,
 );
 router.delete("/:id", authorize("admin"), deleteClient);
+
+// ─── Custom Roles per Client ──────────────────────────────────────────────────
+router.get("/:id/roles", authorize("admin", "staff", "client"), getClientRoles);
+router.post("/:id/roles", authorize("admin", "client"), validate(createCustomRoleSchema), createCustomRole);
+router.put("/:id/roles/:roleId", authorize("admin", "client"), validate(updateCustomRoleSchema), updateCustomRole);
+router.delete("/:id/roles/:roleId", authorize("admin", "client"), deleteCustomRole);
+
+// ─── Sub-Users per Client ─────────────────────────────────────────────────────
+router.get("/:id/users", authorize("admin", "staff", "client"), getClientSubUsers);
+router.get("/:id/users/:subUserId", authorize("admin", "staff", "client"), getClientSubUserById);
+router.post("/:id/users", authorize("admin", "client"), validate(createSubUserSchema), createClientSubUser);
+router.put("/:id/users/:subUserId", authorize("admin", "client"), validate(updateSubUserSchema), updateClientSubUser);
+router.delete("/:id/users/:subUserId", authorize("admin", "client"), deleteClientSubUser);
 
 import { 
   getClientPriceList, 

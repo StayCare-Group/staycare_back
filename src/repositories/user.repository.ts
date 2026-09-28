@@ -11,8 +11,9 @@ export interface IUserMySQL {
   password_hash: string;
   phone: string | null;
   language: "en" | "es";
-  role: UserRole;
+  role: UserRole | string;
   role_id?: EntityId;
+  parent_client_id?: EntityId | null;
   is_active?: boolean;
   refresh_token?: string | null;
   created_at?: Date;
@@ -21,7 +22,7 @@ export interface IUserMySQL {
 
 const USER_BASE_SELECT = `
   SELECT u.id, u.name, u.email, u.password_hash, u.phone, u.language,
-         r.name AS role, u.role_id, u.is_active, u.refresh_token, u.created_at, u.updated_at
+         r.name AS role, u.role_id, u.parent_client_id, u.is_active, u.refresh_token, u.created_at, u.updated_at
   FROM users u
   INNER JOIN roles r ON u.role_id = r.id
 `;
@@ -52,7 +53,7 @@ export class UserRepository {
   }
 
   static async insert(
-    conn: PoolConnection,
+    conn: PoolConnection | null,
     user: {
       name: string;
       email: string;
@@ -60,13 +61,15 @@ export class UserRepository {
       phone: string | null;
       language?: "en" | "es" | undefined;
       role_id: EntityId;
+      parent_client_id?: EntityId | null;
       is_active?: boolean;
     }
   ): Promise<EntityId> {
+    const exec = conn ?? pool;
     const id = generateEntityId();
-    await conn.execute(
-      `INSERT INTO users (id, name, email, password_hash, phone, language, role_id, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    await exec.execute(
+      `INSERT INTO users (id, name, email, password_hash, phone, language, role_id, parent_client_id, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         user.name,
@@ -75,6 +78,7 @@ export class UserRepository {
         user.phone,
         user.language || "en",
         user.role_id,
+        user.parent_client_id ?? null,
         user.is_active !== undefined ? user.is_active : true,
       ]
     );
@@ -96,6 +100,8 @@ export class UserRepository {
     if (data.phone !== undefined) allowed.phone = data.phone;
     if (data.language !== undefined) allowed.language = data.language;
     if (data.password_hash !== undefined) allowed.password_hash = data.password_hash;
+    if (data.role_id !== undefined) allowed.role_id = data.role_id;
+    if (data.parent_client_id !== undefined) allowed.parent_client_id = data.parent_client_id;
     if (data.is_active !== undefined) allowed.is_active = data.is_active;
 
     const entries = Object.entries(allowed).filter(([, v]) => v !== undefined);
@@ -145,6 +151,14 @@ export class UserRepository {
     await pool.execute("DELETE FROM users WHERE id = ?", [id]);
   }
 
+  static async countByRoleId(roleId: EntityId): Promise<number> {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      "SELECT COUNT(*) AS total FROM users WHERE role_id = ?",
+      [roleId]
+    );
+    return Number((rows[0] as { total: number }).total) || 0;
+  }
+
   static async findManyFiltered(
     filter: { role?: string; is_active?: boolean; search?: string },
     limit: number,
@@ -173,4 +187,41 @@ export class UserRepository {
 
     return rows as IUserMySQL[];
   }
+
+  static async findSubUsersByClientId(
+    clientId: EntityId,
+    limit: number,
+    offset: number,
+    search?: string
+  ): Promise<IUserMySQL[]> {
+    let where = "u.parent_client_id = ?";
+    const params: (string | number)[] = [clientId];
+    if (search) {
+      where += " AND (u.name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)";
+      const pattern = `%${search}%`;
+      params.push(pattern, pattern, pattern);
+    }
+    params.push(limit, offset);
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `${USER_BASE_SELECT} WHERE ${where} ORDER BY u.created_at DESC LIMIT ? OFFSET ?`,
+      params
+    );
+    return rows as IUserMySQL[];
+  }
+
+  static async countSubUsersByClientId(clientId: EntityId, search?: string): Promise<number> {
+    let where = "u.parent_client_id = ?";
+    const params: (string | number)[] = [clientId];
+    if (search) {
+      where += " AND (u.name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)";
+      const pattern = `%${search}%`;
+      params.push(pattern, pattern, pattern);
+    }
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS total FROM users u WHERE ${where}`,
+      params
+    );
+    return Number((rows[0] as { total: number }).total) || 0;
+  }
 }
+

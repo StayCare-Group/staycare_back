@@ -124,9 +124,11 @@ export const getAllInvoices = async (req: Request, res: Response) => {
       search: search as string,
     };
 
-    // If client role, force client_id to the authenticated user's ID
-    if (req.user!.role === "client") {
-      filter.client_id = req.user!.userId;
+    // If client role or sub-user, force client_id to the effective client ID
+    const effectiveClientId = req.user!.parentClientId || req.user!.userId;
+    const isClientContext = req.user!.role === "client" || !!req.user!.parentClientId;
+    if (isClientContext) {
+      filter.client_id = effectiveClientId;
     }
 
     const { invoices, total } = await InvoiceService.getAllInvoices(filter as any, limit, skip);
@@ -186,10 +188,11 @@ export const getInvoiceById = async (req: Request, res: Response) => {
     // Return full objects for orders
     const { client_id, ...formattedInvoice } = invoice as any;
 
-    // Authorization check for client role
-    if (req.user!.role === "client") {
-      const authUserId = req.user!.userId;
-      if (invoice.client_id !== authUserId) {
+    // Authorization check for client role or sub-user
+    const effectiveClientId = req.user!.parentClientId || req.user!.userId;
+    const isClientContext = req.user!.role === "client" || !!req.user!.parentClientId;
+    if (isClientContext) {
+      if (String(invoice.client_id) !== String(effectiveClientId)) {
         return sendError(res, 403, "Forbidden");
       }
     }
@@ -287,13 +290,18 @@ export const markOverdue = async (_req: Request, res: Response) => {
 export const exportInvoices = async (req: Request, res: Response) => {
   try {
     const { status, client_id, from, to, search } = req.query;
-
     const filter: { status?: string; client_id?: string; from?: string; to?: string; search?: string } = {};
     if (status)    filter.status    = status    as string;
     if (client_id) filter.client_id = client_id as string;
     if (from)      filter.from      = from      as string;
     if (to)        filter.to        = to        as string;
     if (search)    filter.search    = search    as string;
+
+    const effectiveClientId = req.user!.parentClientId || req.user!.userId;
+    const isClientContext = req.user!.role === "client" || !!req.user!.parentClientId;
+    if (isClientContext) {
+      filter.client_id = effectiveClientId;
+    }
 
     const rows = await InvoiceRepository.findManyForExport(filter);
 

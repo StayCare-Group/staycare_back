@@ -3,6 +3,7 @@ import { AuthService } from "../services/auth.service";
 import { UserService } from "../services/user.service";
 import { UserRepository } from "../repositories/user.repository";
 import { ClientProfileRepository } from "../repositories/clientProfile.repository";
+import { RoleRepository } from "../repositories/role.repository";
 import { setAuthCookies, clearAuthCookies } from "../utils/auth.helper";
 import { sendSuccess, sendError } from "../utils/response";
 import { AppError } from "../utils/AppError";
@@ -182,12 +183,13 @@ export const refreshAccessToken = async (req: Request, res: Response) => {
  * /api/auth/me:
  *   get:
  *     summary: Perfil del usuario autenticado
+ *     description: Retorna los datos del usuario actual, incluyendo su rol (`role`) y la lista de permisos (`permissions`).
  *     tags: [Auth]
  *     security:
  *       - cookieAuth: []
  *     responses:
  *       200:
- *         description: Usuario actual (sin password)
+ *         description: Usuario actual (sin password) junto con `role` y `permissions`
  *       401:
  *         description: No autenticado
  *       404:
@@ -200,8 +202,17 @@ export const getMe = async (req: Request, res: Response) => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password_hash, refresh_token, ...safeUser } = user;
     
+    let userRole = null;
+    let permissions: string[] = [];
+    if (user.role_id) {
+      userRole = await RoleRepository.findById(user.role_id);
+      permissions = await RoleRepository.findPermissionNamesByRoleId(user.role_id);
+    }
+
     return sendSuccess(res, 200, "Current user", { 
       user: safeUser,
+      role: userRole,
+      permissions,
       client_profile,
       properties
     });
