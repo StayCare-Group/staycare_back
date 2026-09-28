@@ -4,6 +4,7 @@ import { OrderStatus } from "../types/orderStatus";
 import { sendSuccess, sendError } from "../utils/response";
 import { parsePagination, paginationMeta } from "../utils/paginate";
 import { AppError } from "../utils/AppError";
+import { OrderRepository } from "../repositories/order.repository";
 
 /**
  * @swagger
@@ -639,5 +640,159 @@ export const confirmDelivery = async (req: Request, res: Response) => {
   } catch (error: any) {
     if (error instanceof AppError) return sendError(res, error.statusCode, error.message);
     return sendError(res, 400, error.message || "Driver confirmation failed");
+  }
+};
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/orders/export
+ *
+ * Downloads a CSV file with one row per order and one column per unique item
+ * name (quantity pivot). Items and status history are fetched in a single SQL
+ * query — no N+1 pattern.
+ *
+ * Access: admin, staff only.
+ *
+ * Body: { ids: string[] }  — internal order IDs returned by GET /api/orders
+ */
+export const exportOrdersFlat = async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body as { ids?: unknown };
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return sendError(res, 400, "ids must be a non-empty array of order identifiers");
+    }
+
+    const rows = await OrderRepository.findManyForExport({ ids: ids as string[] });
+
+    if (rows.length === 0) {
+      return sendError(res, 404, "No orders found for the provided IDs");
+    }
+
+    // ── CSV helpers ───────────────────────────────────────────────────────────
+
+    const escapeCsv = (value: unknown): string => {
+      const str = value == null ? "" : String(value);
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const findHistory = (
+      history: { status: string; note: string | null; changed_at: string | null; user_name: string | null }[],
+      status: string
+    ) => history.find((h) => h.status === status) ?? null;
+
+    const extractMachine = (
+      history: { status: string; note: string | null }[],
+      status: string
+    ): string => {
+      const entry = history.find((h) => h.status === status && h.note);
+      if (!entry?.note) return "";
+      return String(entry.note).replace(/^Machine:\s*/i, "").trim();
+    };
+
+    const formatTimestamp = (entry: { changed_at: string | null } | null): string => {
+      if (!entry?.changed_at) return "";
+      const d = new Date(entry.changed_at);
+      return isNaN(d.getTime()) ? "" : d.toLocaleString("es-ES");
+    };
+
+    // ── Pass 1: collect all unique item names across selected orders ──────────
+
+    const itemNamesSet = new Set<string>();
+    for (const order of rows) {
+      for (const item of order.items) {
+        const name = item.name?.trim();
+        if (name) itemNamesSet.add(name);
+      }
+    }
+    const itemNames = Array.from(itemNamesSet).sort();
+
+    // ── Build CSV ─────────────────────────────────────────────────────────────
+
+    const fixedHeaders = [
+      "Order ID",
+      "Client",
+      "Property",
+      "Created Date",
+      "Pickup Date",
+      "Service Type",
+      "Status",
+      "Bags",
+      "Special Notes",
+      "Total (€)",
+      "Washing Machine",
+      "Drying Machine",
+      "Ironing Machine",
+      "Quality Check By",
+      "Timestamp Arrived",
+      "Timestamp Ironing",
+      "Timestamp Delivered",
+    ];
+
+    const allHeaders = [...fixedHeaders, ...itemNames];
+    const csvLines: string[] = [allHeaders.map(escapeCsv).join(",")];
+
+    for (const order of rows) {
+      const history = order.history;
+
+      const arrivedEntry   = findHistory(history, "received") ?? findHistory(history, "arrived");
+      const ironingEntry   = findHistory(history, "ironing");
+      const deliveredEntry = findHistory(history, "delivered");
+      const qcEntry        = findHistory(history, "quality_check");
+
+      // Pass 2 (per order): build item quantity map
+      const itemQtyMap: Record<string, number> = {};
+      for (const item of order.items) {
+        const name = item.name?.trim();
+        if (!name) continue;
+        const qty =
+          (Number(item.qty_good) || 0) +
+          (Number(item.qty_bad) || 0) +
+          (Number(item.qty_stained) || 0) ||
+          Number(item.quantity) || 0;
+        itemQtyMap[name] = (itemQtyMap[name] ?? 0) + qty;
+      }
+
+      const fixedValues = [
+        order.order_number,
+        order.client_name,
+        order.property_name ?? "",
+        order.created_at,
+        order.pickup_date,
+        order.service_type,
+        order.status,
+        order.actual_bags ?? order.estimated_bags ?? 0,
+        order.special_notes ?? "",
+        order.total ?? 0,
+        extractMachine(history, "washing"),
+        extractMachine(history, "drying"),
+        extractMachine(history, "ironing"),
+        qcEntry?.user_name ?? "",
+        formatTimestamp(arrivedEntry),
+        formatTimestamp(ironingEntry),
+        formatTimestamp(deliveredEntry),
+      ];
+
+      const itemValues = itemNames.map((name) => itemQtyMap[name] ?? 0);
+      const rowValues  = [...fixedValues, ...itemValues];
+
+      csvLines.push(rowValues.map(escapeCsv).join(","));
+    }
+
+    const csv      = csvLines.join("\n");
+    const dateStr  = new Date().toISOString().slice(0, 10);
+    const filename = `Ordenes-Resumen-StayCare-${dateStr}.csv`;
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    // UTF-8 BOM so Excel opens the file with correct encoding
+    return res.status(200).send("\uFEFF" + csv);
+  } catch (error: any) {
+    console.error("exportOrdersFlat error:", error);
+    return sendError(res, 500, error.message || "Failed to export orders");
   }
 };

@@ -431,4 +431,172 @@ export class OrderRepository {
     );
     return rows.length > 0;
   }
+
+  /**
+   * Returns a flat list of orders with their items and status history
+   * aggregated in a single SQL query using JSON_ARRAYAGG.
+   *
+   * Intended exclusively for CSV export — do NOT use for paginated lists.
+   *
+   * @param filter.ids - Explicit order IDs to include (required when no other
+   *                     filter is provided; prevents full-table exports)
+   */
+  static async findManyForExport(filter: {
+    ids?: string[];
+    client_id?: string;
+    status?: string;
+    from?: string;
+    to?: string;
+    search?: string;
+  }): Promise<OrderExportRow[]> {
+    let where = "1=1";
+    const params: unknown[] = [];
+
+    if (filter.ids && filter.ids.length > 0) {
+      const placeholders = filter.ids.map(() => "?").join(", ");
+      where += ` AND o.id IN (${placeholders})`;
+      params.push(...filter.ids);
+    }
+    if (filter.client_id) {
+      where += " AND o.client_id = ?";
+      params.push(filter.client_id);
+    }
+    if (filter.status) {
+      where += " AND o.status = ?";
+      params.push(toDbOrderStatus(filter.status));
+    }
+    if (filter.from) {
+      where += " AND o.created_at >= ?";
+      params.push(filter.from);
+    }
+    if (filter.to) {
+      where += " AND o.created_at <= ?";
+      params.push(filter.to);
+    }
+    if (filter.search) {
+      where += " AND (o.order_number LIKE ? OR u.name LIKE ?)";
+      const pattern = `%${filter.search}%`;
+      params.push(pattern, pattern);
+    }
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT
+         o.id,
+         o.order_number,
+         DATE_FORMAT(o.created_at,  '%Y-%m-%d')          AS created_at,
+         DATE_FORMAT(o.pickup_date, '%Y-%m-%d')          AS pickup_date,
+         o.service_type,
+         o.status,
+         o.estimated_bags,
+         o.actual_bags,
+         o.special_notes,
+         o.total,
+         u.name                                          AS client_name,
+         p.property_name,
+         (
+           SELECT JSON_ARRAYAGG(JSON_OBJECT(
+             'name',        oi.name_snapshot,
+             'qty_good',    oi.qty_good,
+             'qty_bad',     oi.qty_bad,
+             'qty_stained', oi.qty_stained,
+             'quantity',    oi.quantity
+           ))
+           FROM order_items oi
+           WHERE oi.order_id = o.id
+         ) AS items_json,
+         (
+           SELECT JSON_ARRAYAGG(JSON_OBJECT(
+             'status',     h.status,
+             'note',       h.note,
+             'changed_at', h.changed_at,
+             'user_name',  hu.name
+           ))
+           FROM order_status_history h
+           LEFT JOIN users hu ON h.changed_by_user_id = hu.id
+           WHERE h.order_id = o.id
+         ) AS history_json
+       FROM orders o
+       INNER JOIN users u ON o.client_id = u.id
+       LEFT  JOIN properties p ON o.property_id = p.id
+       WHERE ${where}
+       ORDER BY o.created_at DESC
+       LIMIT 5000`,
+      params
+    );
+
+    return (rows as any[]).map((r) => ({
+      id:             r.id,
+      order_number:   r.order_number,
+      created_at:     r.created_at,
+      pickup_date:    r.pickup_date,
+      service_type:   r.service_type,
+      status:         fromDbOrderStatus(r.status),
+      estimated_bags: r.estimated_bags,
+      actual_bags:    r.actual_bags,
+      special_notes:  r.special_notes,
+      total:          r.total,
+      client_name:    r.client_name,
+      property_name:  r.property_name,
+      items:          safeParseJsonArray(r.items_json),
+      history:        safeParseJsonArray(r.history_json)
+                        .map((h: any) => ({
+                          ...h,
+                          status: fromDbOrderStatus(h.status),
+                        }))
+                        .sort(
+                          (a: any, b: any) =>
+                            new Date(a.changed_at || 0).getTime() - new Date(b.changed_at || 0).getTime()
+                        ),
+    }));
+  }
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface OrderExportItem {
+  name: string | null;
+  qty_good: number;
+  qty_bad: number;
+  qty_stained: number;
+  quantity: number;
+}
+
+export interface OrderExportHistoryEntry {
+  status: string;
+  note: string | null;
+  changed_at: string | null;
+  user_name: string | null;
+}
+
+export interface OrderExportRow {
+  id: string;
+  order_number: string;
+  created_at: string;
+  pickup_date: string;
+  service_type: string;
+  status: string;
+  estimated_bags: number | null;
+  actual_bags: number | null;
+  special_notes: string | null;
+  total: number;
+  client_name: string;
+  property_name: string | null;
+  items: OrderExportItem[];
+  history: OrderExportHistoryEntry[];
+}
+
+// ─── Private helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Safely parses a JSON value (string or already-parsed) into an array.
+ * Returns an empty array when the value is absent, not an array, or invalid JSON.
+ */
+function safeParseJsonArray(value: unknown): any[] {
+  if (!value) return [];
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
 }

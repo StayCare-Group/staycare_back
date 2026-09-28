@@ -10,6 +10,7 @@ import {
   reassignOrder,
   receiveOrder,
   confirmDelivery,
+  exportOrdersFlat,
 } from "../controllers/order.controller";
 import { validate } from "../middleware/validate";
 import {
@@ -25,6 +26,13 @@ import { authorize } from "../middleware/authorize";
 const router = Router();
 
 router.use(authenticate);
+
+// ─── Export (must come before /:id to avoid route conflict) ─────────────────
+router.post(
+  "/export",
+  authorize("admin", "staff"),
+  exportOrdersFlat,
+);
 
 // ─── List & Detail ────────────────────────────────────────────────────────────
 router.get("/", getAllOrders);
