@@ -590,15 +590,21 @@ export class OrderService {
     }
   }
 
-  static async confirmPickup(orderId: string, data: any, userId: string, role: string) {
-    if (role !== "driver" && role !== "admin" && role !== "staff") {
-      throw new Error("Only drivers, staff or admin can confirm pickups");
-    }
+  /**
+   * Confirms pickup for a single order ID (internal).
+   * Each call uses its own DB transaction so a failure does not affect other orders.
+   */
+  private static async _confirmPickupSingle(orderId: string, data: any, userId: string, role: string) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
 
       const order = await OrderRepository.findById(orderId);
+      if (!order) throw new AppError(`Order ${orderId} not found`, 404);
+      if (role === "driver" && order.driver_id !== userId) {
+        throw new AppError(`Forbidden: You are not the assigned driver for order ${orderId}.`, 403);
+      }
+
       const incomingNote = data.special_notes;
       const updatedNotes = appendNote(order?.special_notes, incomingNote, "transit");
 
@@ -641,6 +647,54 @@ export class OrderService {
     } finally {
       conn.release();
     }
+  }
+
+  /**
+   * Confirms pickup for one or multiple order IDs.
+   *
+   * - Single ID  → same behavior as before, throws on error.
+   * - Array of IDs → processes each independently; returns
+   *   { succeeded: order[], failed: { orderId, error }[] }.
+   */
+  static async confirmPickup(
+    orderIds: string | string[],
+    data: any,
+    userId: string,
+    role: string
+  ) {
+    if (role !== "driver" && role !== "admin" && role !== "staff") {
+      throw new Error("Only drivers, staff or admin can confirm pickups");
+    }
+
+    // ── Single-order path (backward compatible) ──────────────────────────────
+    if (!Array.isArray(orderIds)) {
+      return this._confirmPickupSingle(orderIds, data, userId, role);
+    }
+
+    // ── Bulk path ─────────────────────────────────────────────────────────────
+    // Sequential processing to avoid connection pool exhaustion.
+    // Running all orders in parallel via Promise.allSettled consumed one
+    // connection per order while holding it open inside a transaction.
+    // When N >= connectionLimit the pool was fully saturated and the internal
+    // pool.execute calls in findById queued indefinitely → deadlock.
+    // Processing orders one at a time keeps peak usage at 1 active connection.
+    const succeeded: any[] = [];
+    const failed: { orderId: string; error: string }[] = [];
+
+    for (let idx = 0; idx < orderIds.length; idx++) {
+      const id = orderIds[idx]!;
+      const orderData = Array.isArray(data.orders)
+        ? { ...data, ...data.orders[idx] }
+        : data;
+      try {
+        const result = await this._confirmPickupSingle(id, orderData, userId, role);
+        succeeded.push(result);
+      } catch (err: any) {
+        failed.push({ orderId: id, error: err?.message ?? "Unknown error" });
+      }
+    }
+
+    return { succeeded, failed };
   }
 
   static async receiveAtFacility(orderId: string, data: any, userId: string, role: string) {
@@ -748,17 +802,23 @@ export class OrderService {
     throw new AppError(`Current order status (${order.status}) does not allow driver confirmation action.`, 400);
   }
 
-  static async confirmDelivery(orderId: string, data: any, userId: string, role: string) {
-    if (role !== "driver" && role !== "admin" && role !== "staff") {
-      throw new Error("Only drivers, staff or admin can confirm delivery");
-    }
+  /**
+   * Confirms delivery for a single order ID (internal).
+   * Each call uses its own DB transaction so a failure does not affect other orders.
+   */
+  private static async _confirmDeliverySingle(orderId: string, data: any, userId: string, role: string) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
 
+      const order = await OrderRepository.findById(orderId);
+      if (!order) throw new AppError(`Order ${orderId} not found`, 404);
+      if (role === "driver" && order.driver_id !== userId) {
+        throw new AppError(`Forbidden: You are not the assigned driver for order ${orderId}.`, 403);
+      }
+
       const incomingDeliveryNote = data.special_notes;
       if (incomingDeliveryNote) {
-        const order = await OrderRepository.findById(orderId);
         const updatedNotes = appendNote(order?.special_notes, incomingDeliveryNote, "delivered");
         if (updatedNotes !== (order?.special_notes ?? null)) {
           await OrderRepository.update(orderId, { special_notes: updatedNotes }, conn);
@@ -803,6 +863,54 @@ export class OrderService {
     } finally {
       conn.release();
     }
+  }
+
+  /**
+   * Confirms delivery for one or multiple order IDs.
+   *
+   * - Single ID  → same behavior as before, throws on error.
+   * - Array of IDs → processes each independently; returns
+   *   { succeeded: order[], failed: { orderId, error }[] }.
+   */
+  static async confirmDelivery(
+    orderIds: string | string[],
+    data: any,
+    userId: string,
+    role: string
+  ) {
+    if (role !== "driver" && role !== "admin" && role !== "staff") {
+      throw new Error("Only drivers, staff or admin can confirm delivery");
+    }
+
+    // ── Single-order path (backward compatible) ──────────────────────────────
+    if (!Array.isArray(orderIds)) {
+      return this._confirmDeliverySingle(orderIds, data, userId, role);
+    }
+
+    // ── Bulk path ─────────────────────────────────────────────────────────────
+    // Sequential processing to avoid connection pool exhaustion.
+    // Running all orders in parallel via Promise.allSettled consumed one
+    // connection per order while holding it open inside a transaction.
+    // When N >= connectionLimit the pool was fully saturated and the internal
+    // pool.execute calls in findById queued indefinitely → deadlock.
+    // Processing orders one at a time keeps peak usage at 1 active connection.
+    const succeeded: any[] = [];
+    const failed: { orderId: string; error: string }[] = [];
+
+    for (let idx = 0; idx < orderIds.length; idx++) {
+      const id = orderIds[idx]!;
+      const orderData = Array.isArray(data.orders)
+        ? { ...data, ...data.orders[idx] }
+        : data;
+      try {
+        const result = await this._confirmDeliverySingle(id, orderData, userId, role);
+        succeeded.push(result);
+      } catch (err: any) {
+        failed.push({ orderId: id, error: err?.message ?? "Unknown error" });
+      }
+    }
+
+    return { succeeded, failed };
   }
 
   static async rescheduleOrder(orderId: string, data: any, userId: string, role?: string) {

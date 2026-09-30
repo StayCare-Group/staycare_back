@@ -653,6 +653,56 @@ export const confirmDelivery = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * PATCH /api/orders/bulk/deliver
+ *
+ * Confirms pickup or delivery for multiple orders in a single request.
+ * Each order is processed independently; partial failures are reported
+ * without rolling back the successful ones.
+ *
+ * Body: { action: 'pickup' | 'delivery', orders: [{ id, actual_bags?, packages_delivered?, special_notes? }], received_by?, special_notes? }
+ * Response: { succeeded: order[], failed: { orderId, error }[] }
+ */
+export const bulkConfirmDriverAction = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const role   = req.user!.role;
+    const { action, orders, received_by, special_notes, photos } = req.body as {
+      action: "pickup" | "delivery";
+      orders: { id: string; actual_bags?: number; packages_delivered?: number; special_notes?: string }[];
+      received_by?: string;
+      special_notes?: string;
+      photos?: { url: string }[];
+    };
+
+    const orderIds = orders.map((o) => o.id);
+
+    // Shared payload merged per-order in the service layer
+    const sharedPayload = {
+      received_by,
+      special_notes,
+      photos,
+      orders, // the service uses this to resolve per-order fields
+    };
+
+    let result: any;
+
+    if (action === "pickup") {
+      result = await OrderService.confirmPickup(orderIds, sharedPayload, userId, role);
+    } else {
+      result = await OrderService.confirmDelivery(orderIds, sharedPayload, userId, role);
+    }
+
+    const status = result.failed?.length > 0 && result.succeeded?.length === 0 ? 400 : 200;
+    return sendSuccess(res, status, "Bulk driver action processed", result);
+  } catch (error: any) {
+    if (error instanceof AppError) return sendError(res, error.statusCode, error.message);
+    return sendError(res, 400, error.message || "Bulk driver confirmation failed");
+  }
+};
+
+
+
 // ─── Export ───────────────────────────────────────────────────────────────────
 
 /**

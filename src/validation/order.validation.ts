@@ -111,3 +111,29 @@ export const confirmDriverActionSchema = z.object({
   }),
   params: z.object({ id: uuidIdSchema }),
 });
+
+/**
+ * Schema for PATCH /api/orders/bulk/deliver
+ *
+ * `orders` carries per-order fields (id + individual quantities).
+ * `received_by` and `special_notes` are shared across the whole batch.
+ */
+export const bulkConfirmDriverActionSchema = z.object({
+  body: z.object({
+    action: z.enum(["pickup", "delivery"]),
+    orders: z
+      .array(
+        z.object({
+          id: uuidIdSchema,
+          actual_bags: z.number().int().positive().optional(),
+          packages_delivered: z.number().int().positive().optional(),
+          special_notes: z.string().optional(),
+        })
+      )
+      .min(1, "At least one order is required"),
+    // Shared fields applied to every order in the batch
+    received_by: z.string().optional(),
+    special_notes: z.string().optional(),
+    photos: z.array(z.object({ url: z.string().url() })).optional(),
+  }),
+});

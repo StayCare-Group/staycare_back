@@ -10,6 +10,7 @@ import {
   reassignOrder,
   receiveOrder,
   confirmDelivery,
+  bulkConfirmDriverAction,
   exportOrdersFlat,
 } from "../controllers/order.controller";
 import { validate } from "../middleware/validate";
@@ -19,6 +20,7 @@ import {
   advanceStatusSchema,
   rescheduleOrderSchema,
   confirmDriverActionSchema,
+  bulkConfirmDriverActionSchema,
 } from "../validation/order.validation";
 import { authenticate } from "../middleware/authenticate";
 import { authorize, authorizePermission } from "../middleware/authorize";
@@ -32,6 +34,14 @@ router.post(
   "/export",
   authorize("admin", "staff"),
   exportOrdersFlat,
+);
+
+// ─── Bulk driver confirm (must come before /:id to avoid route conflict) ─────
+router.patch(
+  "/bulk/deliver",
+  authorize("admin", "driver", "staff"),
+  validate(bulkConfirmDriverActionSchema),
+  bulkConfirmDriverAction,
 );
 
 // ─── List & Detail ────────────────────────────────────────────────────────────
