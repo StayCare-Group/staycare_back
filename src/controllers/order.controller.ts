@@ -734,7 +734,7 @@ export const exportOrdersFlat = async (req: Request, res: Response) => {
 
     const escapeCsv = (value: unknown): string => {
       const str = value == null ? "" : String(value);
-      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+      if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
         return `"${str.replace(/"/g, '""')}"`;
       }
       return str;
@@ -854,5 +854,101 @@ export const exportOrdersFlat = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("exportOrdersFlat error:", error);
     return sendError(res, 500, error.message || "Failed to export orders");
+  }
+};
+
+/**
+ * POST /api/orders/export/stained
+ *
+ * Downloads a CSV file with one row per order and columns:
+ * Order ID, Client, Property, Created Date, Special Notes, + dynamic item columns showing stained count (qty_stained).
+ *
+ * Access: admin, staff only.
+ *
+ * Body: { ids: string[] }  — internal order IDs returned by GET /api/orders
+ */
+export const exportOrdersStained = async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body as { ids?: unknown };
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return sendError(res, 400, "ids must be a non-empty array of order identifiers");
+    }
+
+    const rows = await OrderRepository.findManyForExport({ ids: ids as string[] });
+
+    if (rows.length === 0) {
+      return sendError(res, 404, "No orders found for the provided IDs");
+    }
+
+    // ── CSV helpers ───────────────────────────────────────────────────────────
+
+    const escapeCsv = (value: unknown): string => {
+      const str = value == null ? "" : String(value);
+      if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    // ── Pass 1: collect all unique item names across selected orders ──────────
+
+    const itemNamesSet = new Set<string>();
+    for (const order of rows) {
+      for (const item of order.items) {
+        const name = item.name?.trim();
+        if (name) itemNamesSet.add(name);
+      }
+    }
+    const itemNames = Array.from(itemNamesSet).sort();
+
+    // ── Build CSV ─────────────────────────────────────────────────────────────
+
+    const fixedHeaders = [
+      "Order ID",
+      "Client",
+      "Property",
+      "Created Date",
+      "Special Notes",
+    ];
+
+    const allHeaders = [...fixedHeaders, ...itemNames];
+    const csvLines: string[] = [allHeaders.map(escapeCsv).join(",")];
+
+    for (const order of rows) {
+      // Pass 2 (per order): build item stained quantity map
+      const itemStainedMap: Record<string, number> = {};
+      for (const item of order.items) {
+        const name = item.name?.trim();
+        if (!name) continue;
+        const stainedQty = Number(item.qty_stained) || 0;
+        itemStainedMap[name] = (itemStainedMap[name] ?? 0) + stainedQty;
+      }
+
+      const fixedValues = [
+        order.order_number,
+        order.client_name,
+        order.property_name ?? "",
+        order.created_at,
+        order.special_notes ?? "",
+      ];
+
+      const itemValues = itemNames.map((name) => itemStainedMap[name] ?? 0);
+      const rowValues  = [...fixedValues, ...itemValues];
+
+      csvLines.push(rowValues.map(escapeCsv).join(","));
+    }
+
+    const csv      = csvLines.join("\n");
+    const dateStr  = new Date().toISOString().slice(0, 10);
+    const filename = `Ordenes-Manchados-StayCare-${dateStr}.csv`;
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    // UTF-8 BOM so Excel opens the file with correct encoding
+    return res.status(200).send("\uFEFF" + csv);
+  } catch (error: any) {
+    console.error("exportOrdersStained error:", error);
+    return sendError(res, 500, error.message || "Failed to export stained orders");
   }
 };

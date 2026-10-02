@@ -12,6 +12,7 @@ import {
   confirmDelivery,
   bulkConfirmDriverAction,
   exportOrdersFlat,
+  exportOrdersStained,
 } from "../controllers/order.controller";
 import { validate } from "../middleware/validate";
 import {
@@ -34,6 +35,11 @@ router.post(
   "/export",
   authorize("admin", "staff"),
   exportOrdersFlat,
+);
+router.post(
+  "/export/stained",
+  authorize("admin", "staff"),
+  exportOrdersStained,
 );
 
 // ─── Bulk driver confirm (must come before /:id to avoid route conflict) ─────
