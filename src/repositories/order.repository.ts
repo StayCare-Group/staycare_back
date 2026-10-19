@@ -113,8 +113,9 @@ export interface IOrderStatusHistoryMySQL {
 }
 
 export class OrderRepository {
-  static async findById(id: EntityId): Promise<(IOrderMySQL & { client_name?: string; client_phone?: string; client_contact_person?: string; driver_name?: string; property_name?: string; property_city?: string }) | null> {
-    const [rows] = await pool.execute<RowDataPacket[]>(
+  static async findById(id: EntityId, conn?: PoolConnection): Promise<(IOrderMySQL & { client_name?: string; client_phone?: string; client_contact_person?: string; driver_name?: string; property_name?: string; property_city?: string }) | null> {
+    const exec = conn ?? pool;
+    const [rows] = await exec.execute<RowDataPacket[]>(
       `SELECT o.*, 
               u.name as client_name,
               u.phone as client_phone,
@@ -143,16 +144,37 @@ export class OrderRepository {
     } as IOrderMySQL;
   }
 
-  static async findItemsByOrderId(orderId: EntityId): Promise<IOrderItemMySQL[]> {
-    const [rows] = await pool.execute<RowDataPacket[]>(
+  /**
+   * Reads the order row and locks it until the given transaction ends.
+   * Use it when a decision depends on the current row state (e.g. is_invoiced)
+   * to avoid race conditions between concurrent transactions.
+   */
+  static async findByIdForUpdate(conn: PoolConnection, id: EntityId): Promise<IOrderMySQL | null> {
+    const [rows] = await conn.execute<RowDataPacket[]>(
+      `SELECT * FROM orders WHERE id = ? LIMIT 1 FOR UPDATE`,
+      [id]
+    );
+    if (!rows[0]) return null;
+    const row = rows[0] as any;
+    return {
+      ...row,
+      is_invoiced: Boolean(row.is_invoiced),
+      status: fromDbOrderStatus(row.status),
+    } as IOrderMySQL;
+  }
+
+  static async findItemsByOrderId(orderId: EntityId, conn?: PoolConnection): Promise<IOrderItemMySQL[]> {
+    const exec = conn ?? pool;
+    const [rows] = await exec.execute<RowDataPacket[]>(
       `SELECT * FROM order_items WHERE order_id = ?`,
       [orderId]
     );
     return rows as IOrderItemMySQL[];
   }
 
-  static async findHistoryByOrderId(orderId: EntityId): Promise<IOrderStatusHistoryMySQL[]> {
-    const [rows] = await pool.execute<RowDataPacket[]>(
+  static async findHistoryByOrderId(orderId: EntityId, conn?: PoolConnection): Promise<IOrderStatusHistoryMySQL[]> {
+    const exec = conn ?? pool;
+    const [rows] = await exec.execute<RowDataPacket[]>(
       `SELECT h.*, 
               u.name AS changed_by_user_name, 
               r.name AS changed_by_user_role 
@@ -442,12 +464,12 @@ export class OrderRepository {
    *                     filter is provided; prevents full-table exports)
    */
   static async findManyForExport(filter: {
-    ids?: string[];
-    client_id?: string;
-    status?: string;
-    from?: string;
-    to?: string;
-    search?: string;
+    ids?: string[] | undefined;
+    client_id?: string | undefined;
+    status?: string | string[] | undefined;
+    from?: string | undefined;
+    to?: string | undefined;
+    search?: string | undefined;
   }): Promise<OrderExportRow[]> {
     let where = "1=1";
     const params: unknown[] = [];
@@ -462,8 +484,14 @@ export class OrderRepository {
       params.push(filter.client_id);
     }
     if (filter.status) {
-      where += " AND o.status = ?";
-      params.push(toDbOrderStatus(filter.status));
+      if (Array.isArray(filter.status)) {
+        const placeholders = filter.status.map(() => "?").join(", ");
+        where += ` AND o.status IN (${placeholders})`;
+        params.push(...filter.status.map(toDbOrderStatus));
+      } else {
+        where += " AND o.status = ?";
+        params.push(toDbOrderStatus(filter.status));
+      }
     }
     if (filter.from) {
       where += " AND o.created_at >= ?";

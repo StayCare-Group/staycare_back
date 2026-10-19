@@ -19,7 +19,7 @@ export class PricingService {
   }
 
   static async resolveItemPrice(clientId: string, itemId: string, quantity: number, connection?: any): Promise<ResolvedItemPrice> {
-    const itemDef = await ItemRepository.findById(itemId);
+    const itemDef = await ItemRepository.findById(itemId, connection);
     if (!itemDef) {
       throw new AppError(`Item with ID ${itemId} not found.`, 404);
     }

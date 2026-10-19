@@ -168,4 +168,57 @@ describe("Order Exports (exportOrdersFlat & exportOrdersStained)", () => {
       expect(lines[1]).toContain("ORD-001,Hotel Paradise,Villa Sol,2026-10-01");
     });
   });
+
+  describe("export by filters (no selection)", () => {
+    it("passes sanitized filters to the repository when ids are empty", async () => {
+      vi.mocked(OrderRepository.findManyForExport).mockResolvedValueOnce([]);
+
+      const req = {
+        body: {
+          ids: [],
+          filters: {
+            client_id: " c-1 ",
+            status: ["pending", "", 5],
+            from: "2026-10-01",
+            to: "2026-10-31 23:59:59",
+            search: "",
+          },
+        },
+      } as Request;
+      const res = mockResponse();
+
+      await exportOrdersFlat(req, res);
+
+      expect(OrderRepository.findManyForExport).toHaveBeenCalledWith({
+        client_id: "c-1",
+        status: ["pending"],
+        from: "2026-10-01",
+        to: "2026-10-31 23:59:59",
+        search: undefined,
+      });
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
+
+    it("prefers selected ids over filters", async () => {
+      vi.mocked(OrderRepository.findManyForExport).mockResolvedValueOnce([]);
+
+      const req = { body: { ids: ["ord-1"], filters: { from: "2026-10-01" } } } as Request;
+      const res = mockResponse();
+
+      await exportOrdersStained(req, res);
+
+      expect(OrderRepository.findManyForExport).toHaveBeenCalledWith({ ids: ["ord-1"] });
+    });
+
+    it("returns 400 when neither ids nor filters are provided", async () => {
+      const req = { body: {} } as Request;
+      const res = mockResponse();
+
+      await exportOrdersFlat(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(OrderRepository.findManyForExport).not.toHaveBeenCalled();
+    });
+  });
+
 });

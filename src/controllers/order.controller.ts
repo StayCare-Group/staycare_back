@@ -705,6 +705,51 @@ export const bulkConfirmDriverAction = async (req: Request, res: Response) => {
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 
+type ExportBody = {
+  ids?: unknown;
+  filters?: {
+    client_id?: unknown;
+    status?: unknown;
+    from?: unknown;
+    to?: unknown;
+    search?: unknown;
+  };
+};
+
+const EXPORT_INVALID_BODY_MESSAGE =
+  "ids must be a non-empty array of order identifiers, or filters must be provided";
+
+const asNonEmptyString = (value: unknown): string | undefined =>
+  typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+
+/**
+ * Resolves the rows to export.
+ * - Non-empty `ids`: exports exactly the selected orders (filters are ignored).
+ * - Otherwise `filters` (client_id, status, from, to, search): exports every
+ *   order matching the list filters, capped by the repository limit.
+ * Returns null when the body contains neither.
+ */
+const resolveExportRows = async (body: ExportBody) => {
+  if (Array.isArray(body.ids) && body.ids.length > 0) {
+    return OrderRepository.findManyForExport({ ids: body.ids as string[] });
+  }
+
+  const raw = body.filters;
+  if (!raw || typeof raw !== "object") return null;
+
+  const statuses = Array.isArray(raw.status)
+    ? raw.status.map(asNonEmptyString).filter((s): s is string => Boolean(s))
+    : [];
+
+  return OrderRepository.findManyForExport({
+    client_id: asNonEmptyString(raw.client_id),
+    status: statuses.length > 0 ? statuses : asNonEmptyString(raw.status),
+    from: asNonEmptyString(raw.from),
+    to: asNonEmptyString(raw.to),
+    search: asNonEmptyString(raw.search),
+  });
+};
+
 /**
  * POST /api/orders/export
  *
@@ -715,16 +760,15 @@ export const bulkConfirmDriverAction = async (req: Request, res: Response) => {
  * Access: admin, staff only.
  *
  * Body: { ids: string[] }  — internal order IDs returned by GET /api/orders
+ *    or { filters: { client_id?, status?, from?, to?, search? } } when nothing is selected.
  */
 export const exportOrdersFlat = async (req: Request, res: Response) => {
   try {
-    const { ids } = req.body as { ids?: unknown };
+    const rows = await resolveExportRows(req.body as ExportBody);
 
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return sendError(res, 400, "ids must be a non-empty array of order identifiers");
+    if (rows === null) {
+      return sendError(res, 400, EXPORT_INVALID_BODY_MESSAGE);
     }
-
-    const rows = await OrderRepository.findManyForExport({ ids: ids as string[] });
 
     if (rows.length === 0) {
       return sendError(res, 404, "No orders found for the provided IDs");
@@ -866,16 +910,15 @@ export const exportOrdersFlat = async (req: Request, res: Response) => {
  * Access: admin, staff only.
  *
  * Body: { ids: string[] }  — internal order IDs returned by GET /api/orders
+ *    or { filters: { client_id?, status?, from?, to?, search? } } when nothing is selected.
  */
 export const exportOrdersStained = async (req: Request, res: Response) => {
   try {
-    const { ids } = req.body as { ids?: unknown };
+    const rows = await resolveExportRows(req.body as ExportBody);
 
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return sendError(res, 400, "ids must be a non-empty array of order identifiers");
+    if (rows === null) {
+      return sendError(res, 400, EXPORT_INVALID_BODY_MESSAGE);
     }
-
-    const rows = await OrderRepository.findManyForExport({ ids: ids as string[] });
 
     if (rows.length === 0) {
       return sendError(res, 404, "No orders found for the provided IDs");

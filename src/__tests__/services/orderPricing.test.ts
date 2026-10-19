@@ -43,7 +43,7 @@ describe("OrderService.calculateTotals (Pricing Integration & Freezing)", () => 
       [] // No existing items
     );
 
-    expect(PricingService.resolveOrderItemsPrices).toHaveBeenCalledWith("client-1", [{ item_id: "item-1", quantity: 2 }]);
+    expect(PricingService.resolveOrderItemsPrices).toHaveBeenCalledWith("client-1", [{ item_id: "item-1", quantity: 2 }], undefined);
     expect(res.calculatedItems).toHaveLength(1);
     expect(res.calculatedItems[0].unit_price).toBe(12);
   });
@@ -67,7 +67,7 @@ describe("OrderService.calculateTotals (Pricing Integration & Freezing)", () => 
     );
 
     // It should NOT resolve items again, so it resolves empty array
-    expect(PricingService.resolveOrderItemsPrices).toHaveBeenCalledWith("client-1", []);
+    expect(PricingService.resolveOrderItemsPrices).toHaveBeenCalledWith("client-1", [], undefined);
     expect(res.calculatedItems).toHaveLength(1);
     // Preserves the frozen 8.5 price instead of anything from PricingService or ItemRepository
     expect(res.calculatedItems[0].unit_price).toBe(8.5);
@@ -103,7 +103,7 @@ describe("OrderService.calculateTotals (Pricing Integration & Freezing)", () => 
     );
 
     // Only new item was sent to resolve
-    expect(PricingService.resolveOrderItemsPrices).toHaveBeenCalledWith("client-1", [{ item_id: "item-new", quantity: 1 }]);
+    expect(PricingService.resolveOrderItemsPrices).toHaveBeenCalledWith("client-1", [{ item_id: "item-new", quantity: 1 }], undefined);
     
     const oldItem = res.calculatedItems.find((i: any) => i.item_id === "item-old");
     const newItem = res.calculatedItems.find((i: any) => i.item_id === "item-new");

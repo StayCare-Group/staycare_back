@@ -2,7 +2,7 @@ import pool from "../db/pool";
 import { InvoiceRepository } from "../repositories/invoice.repository";
 import { OrderRepository } from "../repositories/order.repository";
 import { ClientProfileRepository } from "../repositories/clientProfile.repository";
-import { OrderStatus } from "../types/orderStatus";
+import { OrderStatus, INVOICEABLE_ORDER_STATUSES } from "../types/orderStatus";
 import { AppError } from "../utils/AppError";
 import { LineItemInput } from "../validation/invoice.validation";
 import type { EntityId } from "../utils/id";
@@ -39,18 +39,43 @@ export class InvoiceService {
       const orderItemsMap = new Map<string, any[]>();
       const ordersMap = new Map<string, any>();
 
+      // Duplicated IDs would bill the same order twice in a single invoice
+      const uniqueOrderIds = Array.from(new Set(data.order_ids.map(String)));
+      if (uniqueOrderIds.length !== data.order_ids.length) {
+        throw new AppError("La lista de órdenes contiene IDs duplicados.", 400);
+      }
+
+      // Resolve the client (accepts a client_profile id or a user id) before validating ownership
+      let resolvedClientId = data.client_id;
+      const profileUserId = await ClientProfileRepository.findUserIdByProfileId(data.client_id);
+      if (profileUserId) {
+        resolvedClientId = profileUserId;
+      }
+
       // 1. Process orders (Main source of revenue)
-      for (const orderId of data.order_ids) {
-        const order = await OrderRepository.findById(orderId);
+      for (const orderId of uniqueOrderIds) {
+        // Row lock: a concurrent invoice for the same order waits here and then sees is_invoiced = true
+        const order = await OrderRepository.findByIdForUpdate(conn, orderId);
         if (!order) throw new AppError(`La orden #${orderId} no existe.`, 404);
 
-        const items = await OrderRepository.findItemsByOrderId(orderId);
-        if (!items || items.length === 0) {
-          throw new AppError(`La orden #${order.order_number} no tiene ítems confirmados y no puede ser facturada.`, 400);
+        if (String(order.client_id) !== String(resolvedClientId)) {
+          throw new AppError(`La orden #${order.order_number} no pertenece al cliente seleccionado.`, 400);
         }
 
         if (order.is_invoiced) {
           throw new AppError(`La orden #${order.order_number} ya ha sido facturada previamente.`, 400);
+        }
+
+        if (!INVOICEABLE_ORDER_STATUSES.has(order.status as OrderStatus)) {
+          throw new AppError(
+            `La orden #${order.order_number} está en estado '${order.status}' y no puede facturarse hasta que sea recibida en planta.`,
+            400
+          );
+        }
+
+        const items = await OrderRepository.findItemsByOrderId(orderId, conn);
+        if (!items || items.length === 0) {
+          throw new AppError(`La orden #${order.order_number} no tiene ítems confirmados y no puede ser facturada.`, 400);
         }
 
         calculatedSubtotal += Number(order.subtotal);
@@ -71,12 +96,6 @@ export class InvoiceService {
         calculatedSubtotal += itemSubtotal;
         calculatedVatAmount += itemVat;
         calculatedTotal += itemSubtotal + itemVat;
-      }
-
-      let resolvedClientId = data.client_id;
-      const profileUserId = await ClientProfileRepository.findUserIdByProfileId(data.client_id);
-      if (profileUserId) {
-        resolvedClientId = profileUserId;
       }
 
       const invoiceId = await InvoiceRepository.insert(conn, {
@@ -113,7 +132,7 @@ export class InvoiceService {
       }
 
       // Link orders and mark them as INVOICED
-      for (const orderId of data.order_ids) {
+      for (const orderId of uniqueOrderIds) {
         const order = ordersMap.get(String(orderId));
         await InvoiceRepository.linkOrder(conn, invoiceId, orderId);
         await OrderRepository.update(orderId, { is_invoiced: true }, conn);

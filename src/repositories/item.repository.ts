@@ -1,4 +1,5 @@
 import pool from "../db/pool";
+import type { PoolConnection } from "mysql2/promise";
 import type { RowDataPacket } from "mysql2";
 import { generateEntityId, type EntityId } from "../utils/id";
 
@@ -82,8 +83,9 @@ export class ItemRepository {
   }
 
 
-  static async findById(id: EntityId): Promise<IItemRow | null> {
-    const [rows] = await pool.execute<IItemRow[]>("SELECT * FROM items WHERE id = ?", [id]);
+  static async findById(id: EntityId, conn?: PoolConnection): Promise<IItemRow | null> {
+    const exec = conn ?? pool;
+    const [rows] = await exec.execute<IItemRow[]>("SELECT * FROM items WHERE id = ?", [id]);
     return rows[0] || null;
   }
 

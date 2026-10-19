@@ -35,14 +35,15 @@ export interface IMachineMySQL {
 export class MachineRepository {
   // ─── Private Helper ────────────────────────────────────────────────────────
 
-  private static async populateMachineOrders(machines: IMachineMySQL[]): Promise<IMachineMySQL[]> {
+  private static async populateMachineOrders(machines: IMachineMySQL[], conn?: PoolConnection): Promise<IMachineMySQL[]> {
     if (machines.length === 0) return machines;
+    const exec = conn ?? pool;
 
     const machineIds = machines.map((m) => m.id);
     const placeholders = machineIds.map(() => "?").join(",");
 
     try {
-      const [rows] = await pool.query<RowDataPacket[]>(
+      const [rows] = await exec.query<RowDataPacket[]>(
         `SELECT mo.id,
                 mo.machine_id,
                 mo.order_id,
@@ -152,8 +153,9 @@ export class MachineRepository {
     return this.populateMachineOrders(machines);
   }
 
-  static async findById(id: EntityId): Promise<IMachineMySQL | null> {
-    const [rows] = await pool.execute<RowDataPacket[]>(
+  static async findById(id: EntityId, conn?: PoolConnection): Promise<IMachineMySQL | null> {
+    const exec = conn ?? pool;
+    const [rows] = await exec.execute<RowDataPacket[]>(
       `SELECT m.*,
               o.order_number,
               o.status AS order_status
@@ -169,7 +171,7 @@ export class MachineRepository {
       order_status: rows[0].order_status ? fromDbOrderStatus(rows[0].order_status) : undefined,
     } as IMachineMySQL;
 
-    const populated = await this.populateMachineOrders([machine]);
+    const populated = await this.populateMachineOrders([machine], conn);
     return populated[0] || null;
   }
 
@@ -199,9 +201,10 @@ export class MachineRepository {
     return Number((rows[0] as { total: number }).total) || 0;
   }
 
-  static async findByOrderId(orderId: EntityId): Promise<IMachineMySQL | null> {
+  static async findByOrderId(orderId: EntityId, conn?: PoolConnection): Promise<IMachineMySQL | null> {
+    const exec = conn ?? pool;
     try {
-      const [rows] = await pool.execute<RowDataPacket[]>(
+      const [rows] = await exec.execute<RowDataPacket[]>(
         `SELECT m.*
          FROM machines m
          INNER JOIN machine_orders mo ON m.id = mo.machine_id
@@ -210,19 +213,19 @@ export class MachineRepository {
         [orderId]
       );
       if (rows[0]) {
-        const populated = await this.populateMachineOrders([rows[0] as IMachineMySQL]);
+        const populated = await this.populateMachineOrders([rows[0] as IMachineMySQL], conn);
         return populated[0] || null;
       }
     } catch {
       // fallback si machine_orders no estuviera lista
     }
 
-    const [legacy] = await pool.execute<RowDataPacket[]>(
+    const [legacy] = await exec.execute<RowDataPacket[]>(
       `SELECT * FROM machines WHERE current_order_id = ? LIMIT 1`,
       [orderId]
     );
     if (!legacy[0]) return null;
-    const populated = await this.populateMachineOrders([legacy[0] as IMachineMySQL]);
+    const populated = await this.populateMachineOrders([legacy[0] as IMachineMySQL], conn);
     return populated[0] || null;
   }
 

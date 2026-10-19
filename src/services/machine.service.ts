@@ -27,7 +27,7 @@ export class MachineService {
         capacity: parsedCapacity,
         status: data.status || "available",
       });
-      return MachineRepository.findById(id);
+      return await MachineRepository.findById(id, conn);
     } finally {
       conn.release();
     }
@@ -69,18 +69,18 @@ export class MachineService {
     try {
       await conn.beginTransaction();
 
-      const machine = await MachineRepository.findById(id);
+      const machine = await MachineRepository.findById(id, conn);
       if (!machine) throw Object.assign(new Error("Machine not found"), { status: 404 });
       if (machine.status === "maintenance") {
         throw Object.assign(new Error("Machine is under maintenance"), { status: 400 });
       }
 
       // Verify order exists
-      const order = await OrderRepository.findById(orderId);
+      const order = await OrderRepository.findById(orderId, conn);
       if (!order) throw Object.assign(new Error("Order not found"), { status: 404 });
 
       // If order is currently assigned to another machine, release it from that machine first
-      const existingAssignedMachine = await MachineRepository.findByOrderId(orderId);
+      const existingAssignedMachine = await MachineRepository.findByOrderId(orderId, conn);
       if (existingAssignedMachine && existingAssignedMachine.id !== id) {
         await MachineRepository.releaseOrder(existingAssignedMachine.id, orderId, conn);
       }
@@ -117,7 +117,7 @@ export class MachineService {
       }
 
       await conn.commit();
-      return MachineRepository.findById(id);
+      return await MachineRepository.findById(id, conn);
     } catch (error) {
       await conn.rollback();
       throw error;

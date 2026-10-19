@@ -101,7 +101,8 @@ export class OrderService {
     items: { item_id: string; quantity: number }[],
     serviceType: "standard" | "express",
     clientId?: string | null,
-    existingOrderItems?: { item_id: string | null; unit_price: number }[]
+    existingOrderItems?: { item_id: string | null; unit_price: number }[],
+    conn?: PoolConnection
   ) {
     let subtotal = 0;
     const vatPercentage = 18;
@@ -121,7 +122,7 @@ export class OrderService {
     }
 
     // Resolve prices for completely new items using the client's current price list
-    const resolvedNewItems = await PricingService.resolveOrderItemsPrices(clientId!, newItemsToResolve);
+    const resolvedNewItems = await PricingService.resolveOrderItemsPrices(clientId!, newItemsToResolve, conn);
 
     for (const item of items) {
       const existing = itemsWithFrozenPrice.find(i => String(i.item_id) === String(item.item_id));
@@ -132,7 +133,7 @@ export class OrderService {
 
       if (existing) {
         // Use frozen price
-        const itemDef = await ItemRepository.findById(item.item_id);
+        const itemDef = await ItemRepository.findById(item.item_id, conn);
         if (!itemDef) throw new AppError(`Item with ID ${item.item_id} not found.`, 404);
         unitPrice = Number(existing.frozen_unit_price);
         itemCode = itemDef.item_code;
@@ -181,11 +182,11 @@ export class OrderService {
     return { orders, total };
   }
 
-  static async getOrderById(id: string) {
-    const order = await OrderRepository.findById(id);
+  static async getOrderById(id: string, conn?: PoolConnection) {
+    const order = await OrderRepository.findById(id, conn);
     if (!order) return null;
-    const items = await OrderRepository.findItemsByOrderId(id);
-    const history = await OrderRepository.findHistoryByOrderId(id);
+    const items = await OrderRepository.findItemsByOrderId(id, conn);
+    const history = await OrderRepository.findHistoryByOrderId(id, conn);
     return { ...order, items, status_history: history };
   }
 
@@ -206,7 +207,7 @@ export class OrderService {
           throw new Error("A client_id (user ID) is required to create an order as admin/staff.");
         }
         // Verify user exists and is active
-        const [user]: any = await pool.execute("SELECT id, is_active FROM users WHERE id = ?", [clientId]);
+        const [user]: any = await conn.execute("SELECT id, is_active FROM users WHERE id = ?", [clientId]);
         if (user.length === 0) {
           throw new AppError(`Client (User) with ID ${clientId} not found.`, 404);
         }
@@ -223,7 +224,7 @@ export class OrderService {
         vatAmount,
         total,
         calculatedItems
-      } = await this.calculateTotals(data.items || [], data.service_type || "standard", clientId);
+      } = await this.calculateTotals(data.items || [], data.service_type || "standard", clientId, undefined, conn);
 
       const initialNotes = appendNote(null, data.special_notes, "pending");
 
@@ -274,7 +275,7 @@ export class OrderService {
       });
 
       await conn.commit();
-      const result = await this.getOrderById(orderId);
+      const result = await this.getOrderById(orderId, conn);
       this.notifyClientOfStatus(orderId, OrderStatus.PENDING);
       return result;
     } catch (error) {
@@ -300,15 +301,15 @@ export class OrderService {
 
       await MachineRepository.releaseOrderByOrderId(orderId, conn);
 
-      const order = await OrderRepository.findById(orderId);
+      const order = await OrderRepository.findById(orderId, conn);
       if (!order) throw new AppError("Order not found", 404);
 
-      // Block if BOTH invoiced AND completed
-      if (order.is_invoiced && order.status === OrderStatus.COMPLETED) {
-        throw new AppError("Cannot receive or modify an order that is already invoiced and completed.", 403);
+      // An invoiced order is frozen: re-receiving would rewrite items and totals already billed
+      if (order.is_invoiced) {
+        throw new AppError("Cannot receive or modify an order that is already invoiced.", 403);
       }
 
-      const existingItems = await OrderRepository.findItemsByOrderId(orderId);
+      const existingItems = await OrderRepository.findItemsByOrderId(orderId, conn);
 
       // 1. Clear existing items
       await OrderRepository.deleteItemsByOrderId(conn, orderId);
@@ -327,7 +328,7 @@ export class OrderService {
         vatAmount,
         total,
         calculatedItems
-      } = await this.calculateTotals(data.items || [], order.service_type, order.client_id, existingItems);
+      } = await this.calculateTotals(data.items || [], order.service_type, order.client_id, existingItems, conn);
 
       for (const item of calculatedItems) {
         const sourceItem = data.items.find(i => i.item_id === item.item_id);
@@ -368,7 +369,7 @@ export class OrderService {
       });
 
       await conn.commit();
-      return await this.getOrderById(orderId);
+      return await this.getOrderById(orderId, conn);
     } catch (error) {
       await conn.rollback();
       throw error;
@@ -454,7 +455,7 @@ export class OrderService {
       }
 
       if (items && Array.isArray(items)) {
-        const existingItems = await OrderRepository.findItemsByOrderId(id);
+        const existingItems = await OrderRepository.findItemsByOrderId(id, conn);
         await OrderRepository.deleteItemsByOrderId(conn, id);
 
         const {
@@ -462,7 +463,7 @@ export class OrderService {
           vatAmount,
           total,
           calculatedItems
-        } = await this.calculateTotals(items, data.service_type || order.service_type, order.client_id, existingItems);
+        } = await this.calculateTotals(items, data.service_type || order.service_type, order.client_id, existingItems, conn);
 
         for (const item of calculatedItems) {
           const sourceItem = items.find((i: any) => i.item_id === item.item_id);
@@ -488,7 +489,7 @@ export class OrderService {
       await OrderRepository.update(id, updateData, conn);
 
       await conn.commit();
-      return await this.getOrderById(id);
+      return await this.getOrderById(id, conn);
     } catch (error) {
       await conn.rollback();
       throw error;
@@ -569,7 +570,7 @@ export class OrderService {
       });
 
       await conn.commit();
-      const result = await this.getOrderById(orderId);
+      const result = await this.getOrderById(orderId, conn);
       if (!isRollback) {
         this.notifyClientOfStatus(orderId, status);
       }
@@ -599,7 +600,7 @@ export class OrderService {
     try {
       await conn.beginTransaction();
 
-      const order = await OrderRepository.findById(orderId);
+      const order = await OrderRepository.findById(orderId, conn);
       if (!order) throw new AppError(`Order ${orderId} not found`, 404);
       if (role === "driver" && order.driver_id !== userId) {
         throw new AppError(`Forbidden: You are not the assigned driver for order ${orderId}.`, 403);
@@ -638,7 +639,7 @@ export class OrderService {
       });
 
       await conn.commit();
-      const result = await this.getOrderById(orderId);
+      const result = await this.getOrderById(orderId, conn);
       this.notifyClientOfStatus(orderId, OrderStatus.TRANSIT);
       return result;
     } catch (error) {
@@ -717,7 +718,7 @@ export class OrderService {
 
       await MachineRepository.releaseOrderByOrderId(orderId, conn);
 
-      const order = await OrderRepository.findById(orderId);
+      const order = await OrderRepository.findById(orderId, conn);
       const incomingNote = data.special_notes;
       const updatedNotes = appendNote(order?.special_notes, incomingNote, "arrived");
 
@@ -739,7 +740,7 @@ export class OrderService {
       });
 
       await conn.commit();
-      const result = await this.getOrderById(orderId);
+      const result = await this.getOrderById(orderId, conn);
       this.notifyClientOfStatus(orderId, OrderStatus.ARRIVED);
       return result;
     } catch (error) {
@@ -768,7 +769,7 @@ export class OrderService {
       });
 
       await conn.commit();
-      const result = await this.getOrderById(orderId);
+      const result = await this.getOrderById(orderId, conn);
       this.notifyClientOfStatus(orderId, OrderStatus.COLLECTED);
       return result;
     } catch (error) {
@@ -811,7 +812,7 @@ export class OrderService {
     try {
       await conn.beginTransaction();
 
-      const order = await OrderRepository.findById(orderId);
+      const order = await OrderRepository.findById(orderId, conn);
       if (!order) throw new AppError(`Order ${orderId} not found`, 404);
       if (role === "driver" && order.driver_id !== userId) {
         throw new AppError(`Forbidden: You are not the assigned driver for order ${orderId}.`, 403);
@@ -848,7 +849,7 @@ export class OrderService {
       });
 
       await conn.commit();
-      const result = await this.getOrderById(orderId);
+      const result = await this.getOrderById(orderId, conn);
       this.notifyClientOfStatus(orderId, OrderStatus.DELIVERED);
 
       // Automatic Invoicing
@@ -953,7 +954,7 @@ export class OrderService {
       });
 
       await conn.commit();
-      const result = await this.getOrderById(orderId);
+      const result = await this.getOrderById(orderId, conn);
       this.notifyClientOfStatus(orderId, updateData.status || order?.status || OrderStatus.PENDING);
       return result;
     } catch (error) {
@@ -985,7 +986,7 @@ export class OrderService {
       );
       if (drivers.length === 0) throw new Error("Driver not found or inactive");
 
-      const order = await OrderRepository.findById(orderId);
+      const order = await OrderRepository.findById(orderId, conn);
       if (!order) throw new Error("Order not found");
 
       await conn.execute(
@@ -1047,7 +1048,7 @@ export class OrderService {
       });
 
       await conn.commit();
-      const result = await this.getOrderById(orderId);
+      const result = await this.getOrderById(orderId, conn);
       // Only notify if status changed
       if (shouldMoveToAssigned) {
         this.notifyClientOfStatus(orderId, newStatus);
@@ -1189,7 +1190,7 @@ export class OrderService {
       });
 
       await conn.commit();
-      return await this.getOrderById(id);
+      return await this.getOrderById(id, conn);
     } catch (error) {
       await conn.rollback();
       throw error;

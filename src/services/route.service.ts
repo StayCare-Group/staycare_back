@@ -16,10 +16,11 @@ interface RouteCreateInput {
 export class RouteService {
   static async createRoute(data: RouteCreateInput, userId: EntityId) {
     const conn = await pool.getConnection();
+    let routeId: EntityId;
     try {
       await conn.beginTransaction();
 
-      const routeId = await RouteRepository.insert(conn, {
+      routeId = await RouteRepository.insert(conn, {
         route_date: data.route_date,
         driver_id: data.driver_id,
         area: data.area,
@@ -50,13 +51,14 @@ export class RouteService {
       }
 
       await conn.commit();
-      return await RouteRepository.findById(routeId);
     } catch (err) {
       await conn.rollback();
       throw err;
     } finally {
       conn.release();
     }
+
+    return await RouteRepository.findById(routeId);
   }
 
   static async listRoutes(filter: any, limit: number, skip: number) {
