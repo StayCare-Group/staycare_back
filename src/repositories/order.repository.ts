@@ -427,7 +427,6 @@ export class OrderRepository {
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT o.*, 
               u.name as client_name,
-              du.name as driver_name,
               p.property_name,
               p.address as property_address,
               p.area as property_area,
@@ -435,7 +434,6 @@ export class OrderRepository {
               p.lng as property_lng
        FROM orders o
        INNER JOIN users u ON o.client_id = u.id
-       LEFT JOIN users du ON o.driver_id = du.id
        LEFT JOIN properties p ON o.property_id = p.id
        WHERE ${where}
        ORDER BY o.created_at DESC

@@ -633,10 +633,16 @@ export class OrderService {
     try {
       await conn.beginTransaction();
 
-      const order = await OrderRepository.findById(orderId, conn);
+      const order = await OrderRepository.findByIdForUpdate(conn, orderId);
       if (!order) throw new AppError(`Order ${orderId} not found`, 404);
       if (role === "driver" && order.driver_id !== userId) {
         throw new AppError(`Forbidden: You are not the assigned driver for order ${orderId}.`, 403);
+      }
+      if (order.status === OrderStatus.TRANSIT) {
+        throw new AppError(`Pickup has already been confirmed for order ${orderId}.`, 400);
+      }
+      if (order.status !== OrderStatus.PENDING && order.status !== OrderStatus.ASSIGNED) {
+        throw new AppError(`Cannot confirm pickup for order ${orderId} with status '${order.status}'.`, 400);
       }
 
       const incomingNote = data.special_notes;
@@ -792,6 +798,15 @@ export class OrderService {
     try {
       await conn.beginTransaction();
 
+      const order = await OrderRepository.findByIdForUpdate(conn, orderId);
+      if (!order) throw new AppError(`Order ${orderId} not found`, 404);
+      if (order.status === OrderStatus.COLLECTED) {
+        throw new AppError(`Order ${orderId} has already been collected.`, 400);
+      }
+      if (order.status === OrderStatus.DELIVERED || order.status === OrderStatus.COMPLETED) {
+        throw new AppError(`Order ${orderId} has already been delivered.`, 400);
+      }
+
       await OrderRepository.update(orderId, { status: OrderStatus.COLLECTED }, conn);
       await OrderRepository.insertHistory(conn, {
         order_id: orderId,
@@ -845,10 +860,16 @@ export class OrderService {
     try {
       await conn.beginTransaction();
 
-      const order = await OrderRepository.findById(orderId, conn);
+      const order = await OrderRepository.findByIdForUpdate(conn, orderId);
       if (!order) throw new AppError(`Order ${orderId} not found`, 404);
       if (role === "driver" && order.driver_id !== userId) {
         throw new AppError(`Forbidden: You are not the assigned driver for order ${orderId}.`, 403);
+      }
+      if (order.status === OrderStatus.DELIVERED || order.status === OrderStatus.COMPLETED) {
+        throw new AppError(`Order ${orderId} has already been delivered.`, 400);
+      }
+      if (order.status === OrderStatus.CANCELLED) {
+        throw new AppError(`Cannot deliver cancelled order ${orderId}.`, 400);
       }
 
       const incomingDeliveryNote = data.special_notes;
