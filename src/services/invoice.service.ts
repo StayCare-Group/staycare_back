@@ -88,15 +88,14 @@ export class InvoiceService {
       }
 
       // 2. Process additional line items (Extra charges)
-      const vatRate = (data.vat_percentage || 18) / 100;
       const extraItems = data.line_items || [];
       for (const item of extraItems) {
         const itemSubtotal = Number(item.total_price);
-        const itemVat = itemSubtotal * vatRate;
         calculatedSubtotal += itemSubtotal;
-        calculatedVatAmount += itemVat;
-        calculatedTotal += itemSubtotal + itemVat;
+        calculatedTotal += itemSubtotal;
       }
+
+      const invoiceVatPercentage = calculatedVatAmount > 0 ? (data.vat_percentage ?? 18) : 0;
 
       const invoiceId = await InvoiceRepository.insert(conn, {
         invoice_number: invoiceNumber,
@@ -104,7 +103,7 @@ export class InvoiceService {
         issue_date: issueDate,
         due_date: data.due_date,
         subtotal: calculatedSubtotal,
-        vat_percentage: data.vat_percentage || 18,
+        vat_percentage: invoiceVatPercentage,
         vat_amount: calculatedVatAmount,
         total: calculatedTotal,
         status: "pending",

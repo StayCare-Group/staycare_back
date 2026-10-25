@@ -98,6 +98,7 @@ export interface IOrderItemMySQL {
   qty_good: number;
   qty_bad: number;
   qty_stained: number;
+  vat_applied?: boolean | number;
 }
 
 export interface IOrderStatusHistoryMySQL {
@@ -169,7 +170,10 @@ export class OrderRepository {
       `SELECT * FROM order_items WHERE order_id = ?`,
       [orderId]
     );
-    return rows as IOrderItemMySQL[];
+    return (rows as any[]).map(r => ({
+      ...r,
+      vat_applied: Boolean(r.vat_applied),
+    })) as IOrderItemMySQL[];
   }
 
   static async findHistoryByOrderId(orderId: EntityId, conn?: PoolConnection): Promise<IOrderStatusHistoryMySQL[]> {
@@ -222,13 +226,14 @@ export class OrderRepository {
     await conn.execute(
       `INSERT INTO order_items (
         id, order_id, item_id, item_code_snapshot, name_snapshot, quantity, unit_price, total_price,
-        qty_good, qty_bad, qty_stained
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        qty_good, qty_bad, qty_stained, vat_applied
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         item.order_id, item.item_id, item.item_code_snapshot, item.name_snapshot,
         item.quantity, item.unit_price, item.total_price,
-        item.qty_good || 0, item.qty_bad || 0, item.qty_stained || 0
+        item.qty_good || 0, item.qty_bad || 0, item.qty_stained || 0,
+        item.vat_applied ? 1 : 0
       ]
     );
     return id;

@@ -78,4 +78,16 @@ describe("PricingService", () => {
       expect(res[1]!.source).toBe("base_catalog");
     });
   });
+
+  describe("shouldApplyVat", () => {
+    it("never applies VAT to base_catalog items even if applyVatToCustomPrices is true", () => {
+      expect(PricingService.shouldApplyVat("base_catalog", true)).toBe(false);
+      expect(PricingService.shouldApplyVat("base_catalog", false)).toBe(false);
+    });
+
+    it("applies VAT to custom_price_list items only when applyVatToCustomPrices is true", () => {
+      expect(PricingService.shouldApplyVat("custom_price_list", true)).toBe(true);
+      expect(PricingService.shouldApplyVat("custom_price_list", false)).toBe(false);
+    });
+  });
 });

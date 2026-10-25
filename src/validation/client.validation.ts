@@ -20,6 +20,7 @@ export const updateClientSchema = z.object({
     billing_address: z.string().min(1).optional(),
     credits_terms_days: z.number().int().positive().optional(),
     pricing_tier: z.enum(["standard", "premium", "enterprise"]).optional(),
+    apply_vat_to_custom_prices: z.boolean().optional(),
   }),
   params: z.object({ id: z.string() }),
 });

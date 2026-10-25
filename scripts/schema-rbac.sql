@@ -58,6 +58,7 @@ CREATE TABLE client_profiles (
   billing_address     TEXT              NOT NULL,
   credits_terms_days  SMALLINT UNSIGNED NOT NULL DEFAULT 30,
   pricing_tier        ENUM('standard','premium','enterprise') NOT NULL DEFAULT 'standard',
+  apply_vat_to_custom_prices TINYINT(1)        NOT NULL DEFAULT 0,
   created_at          DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 

@@ -89,7 +89,9 @@ CREATE TABLE `users` (
   UNIQUE KEY `uq_users_email` (`email`),
   UNIQUE KEY `uq_users_phone` (`phone`),
   KEY `idx_users_role` (`role_id`),
-  KEY `idx_users_parent_client` (`parent_client_id`),
+  KEY `idx_users_role_active_created` (`role_id`, `is_active`, `created_at`),
+  KEY `idx_users_parent_created` (`parent_client_id`, `created_at`),
+  KEY `idx_users_created_at` (`created_at`),
   CONSTRAINT `fk_users_role`
     FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`)
     ON DELETE RESTRICT ON UPDATE CASCADE,
@@ -111,6 +113,7 @@ CREATE TABLE `client_profiles` (
   `billing_address` TEXT NOT NULL,
   `credits_terms_days` SMALLINT UNSIGNED NOT NULL DEFAULT '30',
   `pricing_tier` ENUM('standard', 'premium', 'enterprise') NOT NULL DEFAULT 'standard',
+  `apply_vat_to_custom_prices` TINYINT(1) NOT NULL DEFAULT '0',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -134,6 +137,7 @@ CREATE TABLE `invitations` (
   UNIQUE KEY `uq_invitations_token` (`token`),
   KEY `idx_invitations_email` (`email`),
   KEY `idx_invitations_expires` (`expires_at`),
+  KEY `idx_invitations_created_at` (`created_at`),
   KEY `fk_invitations_creator` (`created_by`),
   CONSTRAINT `fk_invitations_creator`
     FOREIGN KEY (`created_by`) REFERENCES `users` (`id`)
@@ -330,6 +334,7 @@ CREATE TABLE `order_items` (
   `qty_good` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
   `qty_bad` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
   `qty_stained` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  `vat_applied` TINYINT(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `idx_order_items_order` (`order_id`),
   KEY `idx_order_items_item` (`item_id`),

@@ -10,6 +10,7 @@ import { InvoiceService } from "./invoice.service";
 import { MachineRepository } from "../repositories/machine.repository";
 import { PricingService } from "./pricing.service";
 
+export const VAT_RATE_PERCENTAGE = 18;
 const EXPRESS_SURCHARGE = 25.0;
 
 /**
@@ -101,12 +102,19 @@ export class OrderService {
     items: { item_id: string; quantity: number }[],
     serviceType: "standard" | "express",
     clientId?: string | null,
-    existingOrderItems?: { item_id: string | null; unit_price: number }[],
+    existingOrderItems?: { item_id: string | null; unit_price: number; vat_applied?: boolean | number }[],
     conn?: PoolConnection
   ) {
     let subtotal = 0;
-    const vatPercentage = 18;
     const calculatedItems = [];
+
+    let applyVatToCustomPrices = false;
+    if (clientId) {
+      const profile = await ClientProfileRepository.findByUserId(clientId, conn);
+      if (profile) {
+        applyVatToCustomPrices = Boolean(profile.apply_vat_to_custom_prices);
+      }
+    }
 
     // Separate items that already exist in the order from completely new items
     const newItemsToResolve = [];
@@ -115,7 +123,7 @@ export class OrderService {
     for (const item of items) {
       const existing = existingOrderItems?.find(e => String(e.item_id) === String(item.item_id));
       if (existing) {
-        itemsWithFrozenPrice.push({ ...item, frozen_unit_price: existing.unit_price });
+        itemsWithFrozenPrice.push({ ...item, frozen_unit_price: existing.unit_price, vat_applied: existing.vat_applied });
       } else {
         newItemsToResolve.push(item);
       }
@@ -130,6 +138,7 @@ export class OrderService {
       let unitPrice: number;
       let itemCode: string;
       let name: string;
+      let vatApplied = false;
 
       if (existing) {
         // Use frozen price
@@ -138,6 +147,13 @@ export class OrderService {
         unitPrice = Number(existing.frozen_unit_price);
         itemCode = itemDef.item_code;
         name = itemDef.name;
+        if (existing.vat_applied !== undefined) {
+          vatApplied = Boolean(existing.vat_applied);
+        } else {
+          // If legacy order item has no vat_applied recorded, check whether frozen price is custom vs base
+          const isCustom = Number(itemDef.base_price) !== unitPrice;
+          vatApplied = isCustom && applyVatToCustomPrices;
+        }
       } else {
         // Use newly resolved price
         const resolved = resolvedNewItems.find(r => String(r.item_id) === String(item.item_id));
@@ -145,6 +161,7 @@ export class OrderService {
         unitPrice = Number(resolved.unit_price);
         itemCode = resolved.item_code;
         name = resolved.name;
+        vatApplied = PricingService.shouldApplyVat(resolved.source, applyVatToCustomPrices);
       }
 
       const totalPrice = unitPrice * item.quantity;
@@ -157,10 +174,19 @@ export class OrderService {
         quantity: item.quantity,
         unit_price: unitPrice,
         total_price: totalPrice,
+        vat_applied: vatApplied,
       });
     }
 
-    const vatAmount = parseFloat((subtotal * (vatPercentage / 100)).toFixed(2));
+    let customTaxableSubtotal = 0;
+    for (const ci of calculatedItems) {
+      if (ci.vat_applied) {
+        customTaxableSubtotal += ci.total_price;
+      }
+    }
+
+    const vatAmount = parseFloat((customTaxableSubtotal * (VAT_RATE_PERCENTAGE / 100)).toFixed(2));
+    const vatPercentage = vatAmount > 0 ? VAT_RATE_PERCENTAGE : 0;
     const surcharge = serviceType === "express" ? EXPRESS_SURCHARGE : 0;
     const total = parseFloat((subtotal + vatAmount + surcharge).toFixed(2));
 
@@ -263,6 +289,7 @@ export class OrderService {
           qty_good: item.quantity,
           qty_bad: 0,
           qty_stained: 0,
+          vat_applied: item.vat_applied,
         });
       }
 
@@ -325,6 +352,7 @@ export class OrderService {
       // 2. Re-calculate financials based on staff-provided items
       const {
         subtotal,
+        vatPercentage,
         vatAmount,
         total,
         calculatedItems
@@ -343,6 +371,7 @@ export class OrderService {
           qty_good: sourceItem?.qty_good || 0,
           qty_bad: sourceItem?.qty_bad || 0,
           qty_stained: sourceItem?.qty_stained || 0,
+          vat_applied: item.vat_applied,
         });
       }
 
@@ -354,6 +383,7 @@ export class OrderService {
         status: OrderStatus.ARRIVED,
         staff_confirmed_bags: data.staff_confirmed_bags,
         subtotal,
+        vat_percentage: vatPercentage,
         vat_amount: vatAmount,
         total,
         ...(updatedNotes ? { special_notes: updatedNotes } : {}),
@@ -460,6 +490,7 @@ export class OrderService {
 
         const {
           subtotal,
+          vatPercentage,
           vatAmount,
           total,
           calculatedItems
@@ -478,10 +509,12 @@ export class OrderService {
             qty_good: sourceItem?.qty_good !== undefined ? Number(sourceItem.qty_good) : item.quantity,
             qty_bad: sourceItem?.qty_bad !== undefined ? Number(sourceItem.qty_bad) : 0,
             qty_stained: sourceItem?.qty_stained !== undefined ? Number(sourceItem.qty_stained) : 0,
+            vat_applied: item.vat_applied,
           });
         }
 
         updateData.subtotal = subtotal;
+        updateData.vat_percentage = vatPercentage;
         updateData.vat_amount = vatAmount;
         updateData.total = total;
       }

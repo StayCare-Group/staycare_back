@@ -18,6 +18,13 @@ export class PricingService {
     return customPrice !== undefined && customPrice !== null ? customPrice : basePrice;
   }
 
+  static shouldApplyVat(source: "base_catalog" | "custom_price_list", applyVatToCustomPrices: boolean): boolean {
+    if (source === "base_catalog") {
+      return false;
+    }
+    return Boolean(applyVatToCustomPrices);
+  }
+
   static async resolveItemPrice(clientId: string, itemId: string, quantity: number, connection?: any): Promise<ResolvedItemPrice> {
     const itemDef = await ItemRepository.findById(itemId, connection);
     if (!itemDef) {

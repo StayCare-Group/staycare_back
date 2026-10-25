@@ -7,6 +7,7 @@ const clientProfileSchema = z.object({
   billing_address: z.string().min(1, "billing_address is required"),
   credits_terms_days: z.number().int().positive().max(3650).optional(),
   pricing_tier: z.enum(["standard", "premium", "enterprise"]).optional(),
+  apply_vat_to_custom_prices: z.boolean().optional(),
 });
 
 const registerBodySchema = z
@@ -93,6 +94,7 @@ export const updateUserByAdminSchema = z.object({
         billing_address: z.string().optional(),
         credits_terms_days: z.number().int().positive().optional(),
         pricing_tier: z.enum(["standard", "premium", "enterprise"]).optional(),
+        apply_vat_to_custom_prices: z.boolean().optional(),
       })
       .optional(),
   }),

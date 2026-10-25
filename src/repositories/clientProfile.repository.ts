@@ -13,6 +13,7 @@ export interface IClientProfileRow {
   billing_address: string;
   credits_terms_days: number;
   pricing_tier: PricingTier;
+  apply_vat_to_custom_prices?: boolean | number;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -25,6 +26,7 @@ export type ClientListRow = {
   billing_address: string;
   credits_terms_days: number;
   pricing_tier: PricingTier;
+  apply_vat_to_custom_prices: number;
   created_at: Date;
   updated_at: Date;
   user_name: string;
@@ -36,24 +38,34 @@ export type ClientListRow = {
 
 export class ClientProfileRepository {
 
-  static async findByUserId(userId: EntityId): Promise<IClientProfileRow | null> {
-    const [rows] = await pool.execute<RowDataPacket[]>(
+  static async findByUserId(userId: EntityId, conn?: PoolConnection): Promise<IClientProfileRow | null> {
+    const exec = conn ?? pool;
+    const [rows] = await exec.execute<RowDataPacket[]>(
       `SELECT id, user_id, contact_person, vat_number, billing_address,
-              credits_terms_days, pricing_tier, created_at, updated_at
+              credits_terms_days, pricing_tier, apply_vat_to_custom_prices, created_at, updated_at
        FROM client_profiles WHERE user_id = ? LIMIT 1`,
       [userId]
     );
-    return (rows[0] as IClientProfileRow) || null;
+    if (!rows[0]) return null;
+    return {
+      ...(rows[0] as IClientProfileRow),
+      apply_vat_to_custom_prices: Boolean(rows[0].apply_vat_to_custom_prices),
+    };
   }
 
-  static async findById(id: EntityId): Promise<IClientProfileRow | null> {
-    const [rows] = await pool.execute<RowDataPacket[]>(
+  static async findById(id: EntityId, conn?: PoolConnection): Promise<IClientProfileRow | null> {
+    const exec = conn ?? pool;
+    const [rows] = await exec.execute<RowDataPacket[]>(
       `SELECT id, user_id, contact_person, vat_number, billing_address,
-              credits_terms_days, pricing_tier, created_at, updated_at
+              credits_terms_days, pricing_tier, apply_vat_to_custom_prices, created_at, updated_at
        FROM client_profiles WHERE id = ? LIMIT 1`,
       [id]
     );
-    return (rows[0] as IClientProfileRow) || null;
+    if (!rows[0]) return null;
+    return {
+      ...(rows[0] as IClientProfileRow),
+      apply_vat_to_custom_prices: Boolean(rows[0].apply_vat_to_custom_prices),
+    };
   }
 
   static async findUserIdByProfileId(clientProfileId: EntityId): Promise<EntityId | null> {
@@ -116,6 +128,7 @@ export class ClientProfileRepository {
               COALESCE(cp.billing_address, '') AS billing_address,
               COALESCE(cp.credits_terms_days, 30) AS credits_terms_days,
               COALESCE(cp.pricing_tier, 'standard') AS pricing_tier,
+              COALESCE(cp.apply_vat_to_custom_prices, 0) AS apply_vat_to_custom_prices,
               COALESCE(cp.created_at, u.created_at) AS created_at,
               COALESCE(cp.updated_at, u.updated_at) AS updated_at,
               u.name AS user_name, u.email, u.phone, u.language, u.is_active
@@ -133,7 +146,7 @@ export class ClientProfileRepository {
   static async update(
     clientProfileId: EntityId,
     data: Partial<
-      Pick<IClientProfileRow, "contact_person" | "vat_number" | "billing_address" | "credits_terms_days" | "pricing_tier">
+      Pick<IClientProfileRow, "contact_person" | "vat_number" | "billing_address" | "credits_terms_days" | "pricing_tier" | "apply_vat_to_custom_prices">
     >
   ): Promise<void> {
 
@@ -143,6 +156,7 @@ export class ClientProfileRepository {
     if (data.billing_address !== undefined) allowed.billing_address = data.billing_address;
     if (data.credits_terms_days !== undefined) allowed.credits_terms_days = data.credits_terms_days;
     if (data.pricing_tier !== undefined) allowed.pricing_tier = data.pricing_tier;
+    if (data.apply_vat_to_custom_prices !== undefined) allowed.apply_vat_to_custom_prices = data.apply_vat_to_custom_prices ? 1 : 0;
 
     const entries = Object.entries(allowed).filter(([, v]) => v !== undefined);
     if (entries.length === 0) return;
@@ -162,13 +176,14 @@ export class ClientProfileRepository {
       billing_address: string;
       credits_terms_days?: number;
       pricing_tier?: PricingTier;
+      apply_vat_to_custom_prices?: boolean | number;
     }
   ): Promise<EntityId> {
     const id = generateEntityId();
     await conn.execute(
       `INSERT INTO client_profiles
-        (id, user_id, contact_person, vat_number, billing_address, credits_terms_days, pricing_tier)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        (id, user_id, contact_person, vat_number, billing_address, credits_terms_days, pricing_tier, apply_vat_to_custom_prices)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         row.user_id,
@@ -177,6 +192,7 @@ export class ClientProfileRepository {
         row.billing_address,
         row.credits_terms_days ?? 30,
         row.pricing_tier ?? "standard",
+        row.apply_vat_to_custom_prices ? 1 : 0,
       ]
     );
     return id;
@@ -189,12 +205,13 @@ export class ClientProfileRepository {
     billing_address: string;
     credits_terms_days?: number;
     pricing_tier?: PricingTier;
+    apply_vat_to_custom_prices?: boolean | number;
   }): Promise<EntityId> {
     const id = generateEntityId();
     await pool.execute(
       `INSERT INTO client_profiles
-        (id, user_id, contact_person, vat_number, billing_address, credits_terms_days, pricing_tier)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        (id, user_id, contact_person, vat_number, billing_address, credits_terms_days, pricing_tier, apply_vat_to_custom_prices)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         row.user_id,
@@ -203,6 +220,7 @@ export class ClientProfileRepository {
         row.billing_address,
         row.credits_terms_days ?? 30,
         row.pricing_tier ?? "standard",
+        row.apply_vat_to_custom_prices ? 1 : 0,
       ]
     );
     return id;

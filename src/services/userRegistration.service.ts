@@ -16,6 +16,7 @@ export type ClientProfileInput = {
   billing_address: string;
   credits_terms_days?: number;
   pricing_tier?: "standard" | "premium" | "enterprise";
+  apply_vat_to_custom_prices?: boolean;
 };
 
 export type PropertyCreateRow = {
@@ -81,6 +82,9 @@ export class UserRegistrationService {
             : {}),
           ...(payload.client_profile.pricing_tier !== undefined
             ? { pricing_tier: payload.client_profile.pricing_tier }
+            : {}),
+          ...(payload.client_profile.apply_vat_to_custom_prices !== undefined
+            ? { apply_vat_to_custom_prices: payload.client_profile.apply_vat_to_custom_prices }
             : {}),
         });
 
@@ -149,6 +153,9 @@ export class UserRegistrationService {
             : {}),
           ...(payload.client_profile.pricing_tier !== undefined
             ? { pricing_tier: payload.client_profile.pricing_tier }
+            : {}),
+          ...(payload.client_profile.apply_vat_to_custom_prices !== undefined
+            ? { apply_vat_to_custom_prices: payload.client_profile.apply_vat_to_custom_prices }
             : {}),
         });
         for (const p of payload.properties ?? []) {

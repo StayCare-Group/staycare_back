@@ -20,6 +20,7 @@ export type UpdateClientProfileBody = {
   billing_address?: string;
   credits_terms_days?: number;
   pricing_tier?: "standard" | "premium" | "enterprise";
+  apply_vat_to_custom_prices?: boolean;
 };
 
 export type UpdateUserByAdminBody = {
@@ -35,6 +36,7 @@ export type UpdateUserByAdminBody = {
     billing_address?: string;
     credits_terms_days?: number;
     pricing_tier?: "standard" | "premium" | "enterprise";
+    apply_vat_to_custom_prices?: boolean;
   };
 };
 
@@ -98,6 +100,7 @@ export class UserService {
     if (body.billing_address !== undefined) profilePatch.billing_address = body.billing_address;
     if (body.credits_terms_days !== undefined) profilePatch.credits_terms_days = body.credits_terms_days;
     if (body.pricing_tier !== undefined) profilePatch.pricing_tier = body.pricing_tier;
+    if (body.apply_vat_to_custom_prices !== undefined) profilePatch.apply_vat_to_custom_prices = body.apply_vat_to_custom_prices;
 
     try {
       if (Object.keys(userPatch).length) await UserRepository.update(userId, userPatch);
@@ -115,6 +118,7 @@ export class UserService {
           billing_address: body.billing_address ?? '',
           credits_terms_days: body.credits_terms_days ?? 30,
           pricing_tier: body.pricing_tier ?? 'standard',
+          apply_vat_to_custom_prices: body.apply_vat_to_custom_prices ?? false,
         });
       }
     } catch (err) {
@@ -220,6 +224,7 @@ export class UserService {
             billing_address: profileToUpdate.billing_address ?? "",
             credits_terms_days: profileToUpdate.credits_terms_days ?? 30,
             pricing_tier: profileToUpdate.pricing_tier ?? "standard",
+            apply_vat_to_custom_prices: profileToUpdate.apply_vat_to_custom_prices ?? false,
           });
         }
       }
