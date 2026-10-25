@@ -45,8 +45,8 @@ export class ReportRepository {
       "SELECT COUNT(*) as total FROM orders"
     );
     const [todayCount] = await pool.execute<RowDataPacket[]>(
-      "SELECT COUNT(*) as total FROM orders WHERE DATE(created_at) = ? OR pickup_date = ?",
-      [today, today]
+      "SELECT COUNT(*) as total FROM orders WHERE (created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)) OR pickup_date = ?",
+      [today, today, today]
     );
     const [activeCount] = await pool.execute<RowDataPacket[]>(
       "SELECT COUNT(*) as total FROM orders WHERE status NOT IN ('Delivered', 'Completed')"

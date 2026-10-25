@@ -159,6 +159,9 @@ CREATE TABLE `invoices` (
   KEY `idx_invoices_status` (`status`),
   KEY `idx_invoices_due_date` (`due_date`),
   KEY `idx_invoices_client_status` (`client_id`, `status`),
+  KEY `idx_invoices_issue_date` (`issue_date`),
+  KEY `idx_invoices_created_at` (`created_at`),
+  KEY `idx_invoices_status_issue_date` (`status`, `issue_date`),
   CONSTRAINT `fk_invoices_client`
     FOREIGN KEY (`client_id`) REFERENCES `users` (`id`)
     ON DELETE RESTRICT ON UPDATE CASCADE
@@ -226,6 +229,7 @@ CREATE TABLE `orders` (
   KEY `idx_orders_property` (`property_id`),
   KEY `idx_orders_status` (`status`),
   KEY `idx_orders_pickup_date` (`pickup_date`),
+  KEY `idx_orders_created_at` (`created_at`),
   CONSTRAINT `fk_orders_client_user`
     FOREIGN KEY (`client_id`) REFERENCES `users` (`id`)
     ON DELETE CASCADE ON UPDATE CASCADE,
