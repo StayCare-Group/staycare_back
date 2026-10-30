@@ -1,11 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { exportOrdersFlat, exportOrdersStained } from "../../controllers/order.controller";
 import { OrderRepository } from "../../repositories/order.repository";
+import { ItemRepository } from "../../repositories/item.repository";
 import type { Request, Response } from "express";
 
 vi.mock("../../repositories/order.repository", () => ({
   OrderRepository: {
     findManyForExport: vi.fn(),
+  },
+}));
+
+vi.mock("../../repositories/item.repository", () => ({
+  ItemRepository: {
+    findAll: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -31,6 +38,8 @@ function mockResponse() {
   });
   return res as Response & { body: any; headers: Record<string, string> };
 }
+
+const adminUser = { userId: "admin-1", role: "admin" };
 
 describe("Order Exports (exportOrdersFlat & exportOrdersStained)", () => {
   beforeEach(() => {
@@ -125,7 +134,7 @@ describe("Order Exports (exportOrdersFlat & exportOrdersStained)", () => {
 
   describe("exportOrdersFlat", () => {
     it("returns 400 if ids is missing or empty", async () => {
-      const req = { body: { ids: [] } } as Request;
+      const req = { body: { ids: [] }, user: adminUser } as Request;
       const res = mockResponse();
 
       await exportOrdersFlat(req, res);
@@ -154,7 +163,7 @@ describe("Order Exports (exportOrdersFlat & exportOrdersStained)", () => {
 
       vi.mocked(OrderRepository.findManyForExport).mockResolvedValueOnce(mockExportData);
 
-      const req = { body: { ids: ["ord-1"] } } as Request;
+      const req = { body: { ids: ["ord-1"] }, user: adminUser } as Request;
       const res = mockResponse();
 
       await exportOrdersFlat(req, res);
@@ -166,6 +175,44 @@ describe("Order Exports (exportOrdersFlat & exportOrdersStained)", () => {
       const lines = csvContent.split("\n");
       expect(lines[0]).toContain("Order ID,Client,Property,Created Date,Pickup Date");
       expect(lines[1]).toContain("ORD-001,Hotel Paradise,Villa Sol,2026-10-01");
+    });
+
+    it("includes every active catalog item as a column, zero-filled when not ordered", async () => {
+      vi.mocked(ItemRepository.findAll).mockResolvedValueOnce([
+        { name: "Towel" },
+        { name: "Sheet" },
+        { name: "Napkin" },
+      ] as any);
+      vi.mocked(OrderRepository.findManyForExport).mockResolvedValueOnce([
+        {
+          id: "ord-1",
+          order_number: "ORD-001",
+          client_name: "Hotel Paradise",
+          property_name: null,
+          created_at: "2026-10-01",
+          pickup_date: "2026-10-02",
+          service_type: "standard",
+          status: "pending",
+          actual_bags: 1,
+          special_notes: null,
+          total: 10,
+          history: [],
+          items: [
+            { name: "Towel", qty_good: 3, qty_bad: 0, qty_stained: 0, quantity: 3 },
+            { name: "Legacy Robe", qty_good: 1, qty_bad: 0, qty_stained: 0, quantity: 1 },
+          ],
+        },
+      ] as any);
+
+      const req = { body: { ids: ["ord-1"] }, user: adminUser } as Request;
+      const res = mockResponse();
+
+      await exportOrdersFlat(req, res);
+
+      const lines = (res.body as string).slice(1).split("\n");
+      // Sorted columns: Legacy Robe (from the order), Napkin, Sheet, Towel
+      expect(lines[0]!.endsWith("Legacy Robe,Napkin,Sheet,Towel")).toBe(true);
+      expect(lines[1]!.endsWith(",1,0,0,3")).toBe(true);
     });
   });
 
@@ -184,6 +231,7 @@ describe("Order Exports (exportOrdersFlat & exportOrdersStained)", () => {
             search: "",
           },
         },
+        user: adminUser,
       } as Request;
       const res = mockResponse();
 
@@ -211,13 +259,58 @@ describe("Order Exports (exportOrdersFlat & exportOrdersStained)", () => {
     });
 
     it("returns 400 when neither ids nor filters are provided", async () => {
-      const req = { body: {} } as Request;
+      const req = { body: {}, user: adminUser } as Request;
       const res = mockResponse();
 
       await exportOrdersFlat(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(OrderRepository.findManyForExport).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("client isolation on exportOrdersFlat", () => {
+    it("forces the client's own id on explicit ids", async () => {
+      vi.mocked(OrderRepository.findManyForExport).mockResolvedValueOnce([]);
+      const req = {
+        body: { ids: ["ord-other"] },
+        user: { userId: "client-1", role: "client" },
+      } as unknown as Request;
+
+      await exportOrdersFlat(req, mockResponse());
+
+      expect(OrderRepository.findManyForExport).toHaveBeenCalledWith({
+        ids: ["ord-other"],
+        client_id: "client-1",
+      });
+    });
+
+    it("overrides a foreign client_id sent in the filters", async () => {
+      vi.mocked(OrderRepository.findManyForExport).mockResolvedValueOnce([]);
+      const req = {
+        body: { filters: { client_id: "client-2" } },
+        user: { userId: "client-1", role: "client" },
+      } as unknown as Request;
+
+      await exportOrdersFlat(req, mockResponse());
+
+      expect(OrderRepository.findManyForExport).toHaveBeenCalledWith(
+        expect.objectContaining({ client_id: "client-1" })
+      );
+    });
+
+    it("uses the parent client id for sub-users", async () => {
+      vi.mocked(OrderRepository.findManyForExport).mockResolvedValueOnce([]);
+      const req = {
+        body: { filters: { client_id: "client-2" } },
+        user: { userId: "sub-1", role: "client", parentClientId: "client-1" },
+      } as unknown as Request;
+
+      await exportOrdersFlat(req, mockResponse());
+
+      expect(OrderRepository.findManyForExport).toHaveBeenCalledWith(
+        expect.objectContaining({ client_id: "client-1" })
+      );
     });
   });
 

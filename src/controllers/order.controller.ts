@@ -5,6 +5,7 @@ import { sendSuccess, sendError } from "../utils/response";
 import { parsePagination, paginationMeta } from "../utils/paginate";
 import { AppError } from "../utils/AppError";
 import { OrderRepository } from "../repositories/order.repository";
+import { ItemRepository } from "../repositories/item.repository";
 
 /**
  * @swagger
@@ -728,10 +729,17 @@ const asNonEmptyString = (value: unknown): string | undefined =>
  * - Otherwise `filters` (client_id, status, from, to, search): exports every
  *   order matching the list filters, capped by the repository limit.
  * Returns null when the body contains neither.
+ *
+ * `forcedClientId` (set for client / sub-user requests) always overrides any
+ * client_id sent in the body and is also applied to explicit `ids`, so a client
+ * can never export orders that belong to another client.
  */
-const resolveExportRows = async (body: ExportBody) => {
+const resolveExportRows = async (body: ExportBody, forcedClientId?: string) => {
   if (Array.isArray(body.ids) && body.ids.length > 0) {
-    return OrderRepository.findManyForExport({ ids: body.ids as string[] });
+    return OrderRepository.findManyForExport({
+      ids: body.ids as string[],
+      client_id: forcedClientId,
+    });
   }
 
   const raw = body.filters;
@@ -742,7 +750,7 @@ const resolveExportRows = async (body: ExportBody) => {
     : [];
 
   return OrderRepository.findManyForExport({
-    client_id: asNonEmptyString(raw.client_id),
+    client_id: forcedClientId ?? asNonEmptyString(raw.client_id),
     status: statuses.length > 0 ? statuses : asNonEmptyString(raw.status),
     from: asNonEmptyString(raw.from),
     to: asNonEmptyString(raw.to),
@@ -757,14 +765,19 @@ const resolveExportRows = async (body: ExportBody) => {
  * name (quantity pivot). Items and status history are fetched in a single SQL
  * query — no N+1 pattern.
  *
- * Access: admin, staff only.
+ * Access: admin, staff, and clients / sub-users with `orders:read`.
+ * Clients and sub-users only receive orders of their own client account.
  *
  * Body: { ids: string[] }  — internal order IDs returned by GET /api/orders
  *    or { filters: { client_id?, status?, from?, to?, search? } } when nothing is selected.
  */
 export const exportOrdersFlat = async (req: Request, res: Response) => {
   try {
-    const rows = await resolveExportRows(req.body as ExportBody);
+    const isClientContext = req.user!.role === "client" || !!req.user!.parentClientId;
+    const forcedClientId = isClientContext
+      ? String(req.user!.parentClientId || req.user!.userId)
+      : undefined;
+    const rows = await resolveExportRows(req.body as ExportBody, forcedClientId);
 
     if (rows === null) {
       return sendError(res, 400, EXPORT_INVALID_BODY_MESSAGE);
@@ -804,9 +817,16 @@ export const exportOrdersFlat = async (req: Request, res: Response) => {
       return isNaN(d.getTime()) ? "" : d.toLocaleString("es-ES");
     };
 
-    // ── Pass 1: collect all unique item names across selected orders ──────────
+    // ── Pass 1: item columns = full active catalog + any item found in the orders ──
+    // Catalog first so the layout is standard for every role; order items are added
+    // too so deactivated / legacy items from past orders are never dropped.
 
     const itemNamesSet = new Set<string>();
+    const catalogItems = await ItemRepository.findAll(true);
+    for (const catalogItem of catalogItems) {
+      const name = catalogItem.name?.trim();
+      if (name) itemNamesSet.add(name);
+    }
     for (const order of rows) {
       for (const item of order.items) {
         const name = item.name?.trim();

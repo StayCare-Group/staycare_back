@@ -33,7 +33,8 @@ router.use(authenticate);
 // ─── Export (must come before /:id to avoid route conflict) ─────────────────
 router.post(
   "/export",
-  authorize("admin", "staff"),
+  authorize("admin", "staff", "client"),
+  authorizePermission("orders:read"),
   exportOrdersFlat,
 );
 router.post(
