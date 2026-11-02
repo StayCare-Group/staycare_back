@@ -274,11 +274,17 @@ export class OrderRepository {
   ): Promise<boolean> {
     const dbStatus = toDbOrderStatus(status);
     const rawStatus = String(status);
+    const isOperatorsNote = /^Operators:/i.test(String(note || "").trim());
+
+    const noteFilterClause = isOperatorsNote
+      ? "AND (note LIKE 'Operators:%' OR note LIKE 'Status updated to%')"
+      : "AND (note IS NULL OR note NOT LIKE 'Operators:%')";
+
     const [result]: any = await conn.execute(
       `UPDATE order_status_history 
        SET note = ?, 
            changed_by_user_id = COALESCE(?, changed_by_user_id) 
-       WHERE order_id = ? AND (status = ? OR status = ?) 
+       WHERE order_id = ? AND (status = ? OR status = ?) ${noteFilterClause}
        ORDER BY changed_at DESC 
        LIMIT 1`,
       [note, userId || null, orderId, dbStatus, rawStatus]
@@ -422,6 +428,18 @@ export class OrderRepository {
       params.push(pattern, pattern);
     }
 
+    const operatorsSelect = filter.include_iron_operators
+      ? `, CASE WHEN (o.status = 'Ironing' OR o.status = 'ironing') THEN (
+                SELECT h.note
+                FROM order_status_history h
+                WHERE h.order_id = o.id
+                  AND (h.status = 'Ironing' OR h.status = 'ironing')
+                  AND h.note LIKE 'Operators:%'
+                ORDER BY h.changed_at DESC
+                LIMIT 1
+              ) ELSE NULL END AS ironing_operators_note`
+      : "";
+
     params.push(limit, offset);
 
     const [rows] = await pool.query<RowDataPacket[]>(
@@ -431,7 +449,7 @@ export class OrderRepository {
               p.address as property_address,
               p.area as property_area,
               p.lat as property_lat,
-              p.lng as property_lng
+              p.lng as property_lng${operatorsSelect}
        FROM orders o
        INNER JOIN users u ON o.client_id = u.id
        LEFT JOIN properties p ON o.property_id = p.id
@@ -446,6 +464,13 @@ export class OrderRepository {
       ...r,
       is_invoiced: Boolean(r.is_invoiced),
       status: fromDbOrderStatus(r.status),
+      iron_operators: r.ironing_operators_note
+        ? String(r.ironing_operators_note)
+            .replace(/^Operators:\s*/i, "")
+            .split(",")
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+        : [],
     }));
   }
 

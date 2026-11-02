@@ -214,6 +214,40 @@ describe("Order Exports (exportOrdersFlat & exportOrdersStained)", () => {
       expect(lines[0]!.endsWith("Legacy Robe,Napkin,Sheet,Towel")).toBe(true);
       expect(lines[1]!.endsWith(",1,0,0,3")).toBe(true);
     });
+
+    it("extracts Ironing Machine and Ironing Operator from separate history notes", async () => {
+      vi.mocked(OrderRepository.findManyForExport).mockResolvedValueOnce([
+        {
+          id: "ord-iron",
+          order_number: "ORD-IRON-1",
+          client_name: "Hotel Paradise",
+          property_name: "Villa Sol",
+          created_at: "2026-10-01",
+          pickup_date: "2026-10-02",
+          service_type: "standard",
+          status: "ironing",
+          actual_bags: 2,
+          special_notes: "",
+          total: 100,
+          history: [
+            { status: "washing", note: "Machine: Washer #1", changed_at: "2026-10-02T10:00:00Z", user_name: "Staff" },
+            { status: "drying", note: "Machine: Dryer #2", changed_at: "2026-10-02T11:00:00Z", user_name: "Staff" },
+            { status: "ironing", note: "Machine: Iron Station #1", changed_at: "2026-10-02T12:00:00Z", user_name: "Staff" },
+            { status: "ironing", note: "Operators: Ana Gómez, Luis Pérez", changed_at: "2026-10-02T12:05:00Z", user_name: "Ana Gómez" },
+          ],
+          items: [],
+        },
+      ] as any);
+
+      const req = { body: { ids: ["ord-iron"] }, user: adminUser } as Request;
+      const res = mockResponse();
+
+      await exportOrdersFlat(req, res);
+
+      const lines = (res.body as string).slice(1).split("\n");
+      expect(lines[0]).toContain("Washing Machine,Drying Machine,Ironing Machine,Ironing Operator,Quality Check By");
+      expect(lines[1]).toContain('Washer #1,Dryer #2,Iron Station #1,"Ana Gómez, Luis Pérez",');
+    });
   });
 
   describe("export by filters (no selection)", () => {

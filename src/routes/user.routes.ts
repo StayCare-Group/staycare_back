@@ -14,8 +14,8 @@ const router = Router();
 
 router.use(authenticate);
 
-// Admin/Staff only: list and get user details
-router.get("/", authorize("admin", "staff"), getAllUsers);
+// Admin/Staff/Operator: list users (operator is restricted to active operators in controller)
+router.get("/", authorize("admin", "staff", "operator"), getAllUsers);
 router.get("/:id", authorize("admin", "staff"), getUserById);
 
 // Admin only: update/deactivate users

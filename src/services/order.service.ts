@@ -584,8 +584,16 @@ export class OrderService {
     }
 
     const currentStatusNorm = String(order.status || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const isIroningOperatorsUpdate =
+      currentStatusNorm === OrderStatus.IRONING &&
+      status === OrderStatus.IRONING &&
+      Boolean(note && /^Operators:/i.test(note.trim()));
+
     if (role === "operator") {
-      if (currentStatusNorm !== OrderStatus.IRONING || status !== OrderStatus.QUALITY_CHECK) {
+      if (
+        !isIroningOperatorsUpdate &&
+        (currentStatusNorm !== OrderStatus.IRONING || status !== OrderStatus.QUALITY_CHECK)
+      ) {
         throw new AppError("Operators can only move orders from ironing to quality_check.", 403);
       }
     }
@@ -602,29 +610,53 @@ export class OrderService {
       // before changing the status. This runs inside the transaction.
       if (isRollback) {
         await MachineRepository.releaseOrderByOrderId(orderId, conn);
-      }
-
-      const updateData: Partial<IOrderMySQL> = { status };
-      if (specialNotes && specialNotes.trim()) {
-        const stageTag = status === OrderStatus.READY_TO_DELIVERY ? "quality_check" : status.toLowerCase();
-        const updatedNotes = appendNote(order.special_notes, specialNotes, stageTag);
-        if (updatedNotes !== (order.special_notes ?? null)) {
-          updateData.special_notes = updatedNotes;
+        const ironingIdx = PROCESSING_PIPELINE.indexOf(OrderStatus.IRONING);
+        if (targetPipelineIdx < ironingIdx) {
+          await OrderRepository.updateLatestHistoryNote(conn, orderId, OrderStatus.IRONING, "Operators: ", userId);
         }
       }
 
-      await OrderRepository.update(orderId, updateData, conn);
-      await OrderRepository.insertHistory(conn, {
-        order_id: orderId,
-        changed_by_user_id: userId,
-        is_system: false,
-        status,
-        note: note || `Status updated to ${status}`,
-      });
+      if (isIroningOperatorsUpdate && note) {
+        const trimmedNote = note.trim();
+        const updated = await OrderRepository.updateLatestHistoryNote(
+          conn,
+          orderId,
+          status,
+          trimmedNote,
+          userId
+        );
+        if (!updated) {
+          await OrderRepository.insertHistory(conn, {
+            order_id: orderId,
+            changed_by_user_id: userId,
+            is_system: false,
+            status,
+            note: trimmedNote,
+          });
+        }
+      } else {
+        const updateData: Partial<IOrderMySQL> = { status };
+        if (specialNotes && specialNotes.trim()) {
+          const stageTag = status === OrderStatus.READY_TO_DELIVERY ? "quality_check" : status.toLowerCase();
+          const updatedNotes = appendNote(order.special_notes, specialNotes, stageTag);
+          if (updatedNotes !== (order.special_notes ?? null)) {
+            updateData.special_notes = updatedNotes;
+          }
+        }
+
+        await OrderRepository.update(orderId, updateData, conn);
+        await OrderRepository.insertHistory(conn, {
+          order_id: orderId,
+          changed_by_user_id: userId,
+          is_system: false,
+          status,
+          note: note || `Status updated to ${status}`,
+        });
+      }
 
       await conn.commit();
       const result = await this.getOrderById(orderId, conn);
-      if (!isRollback) {
+      if (!isRollback && !isIroningOperatorsUpdate) {
         this.notifyClientOfStatus(orderId, status);
       }
 

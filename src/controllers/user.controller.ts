@@ -56,6 +56,11 @@ export const getAllUsers = async (req: Request, res: Response) => {
     if (is_active !== undefined) filter.is_active = is_active === "true";
     if (search) filter.search = search as string;
 
+    if (req.user?.role === "operator") {
+      filter.role = "operator";
+      filter.is_active = true;
+    }
+
     const { users, total } = await UserService.getAllUsers(filter, page, limit);
 
     return sendSuccess(

@@ -204,6 +204,39 @@ describe("Operator Role Permissions and Processing Restrictions", () => {
       );
     });
 
+    it("allows operator to record or update ironing operators note when order is in ironing", async () => {
+      vi.mocked(OrderRepository.findById).mockResolvedValue({
+        id: "ord-iron-1",
+        status: OrderStatus.IRONING,
+        is_invoiced: false,
+      } as any);
+      vi.mocked(OrderRepository.updateLatestHistoryNote).mockResolvedValueOnce(false);
+
+      await OrderService.advanceStatus(
+        "ord-iron-1",
+        OrderStatus.IRONING,
+        { note: "Operators: Ana Gómez, Luis Pérez" },
+        "op-1",
+        "operator"
+      );
+
+      expect(OrderRepository.updateLatestHistoryNote).toHaveBeenCalledWith(
+        expect.anything(),
+        "ord-iron-1",
+        OrderStatus.IRONING,
+        "Operators: Ana Gómez, Luis Pérez",
+        "op-1"
+      );
+      expect(OrderRepository.insertHistory).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          order_id: "ord-iron-1",
+          status: OrderStatus.IRONING,
+          note: "Operators: Ana Gómez, Luis Pérez",
+        })
+      );
+    });
+
     it("blocks operator from advancing orders in other stages (e.g. arrived -> washing, drying -> ironing, quality_check -> ready_to_delivery)", async () => {
       vi.mocked(OrderRepository.findById).mockResolvedValueOnce({
         id: "ord-1",

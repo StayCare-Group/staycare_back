@@ -140,10 +140,14 @@ export const createOrder = async (req: Request, res: Response) => {
  */
 export const getAllOrders = async (req: Request, res: Response) => {
   try {
-    const { status, is_invoiced, client_id, client, service_type, from, to, pickup_from, pickup_to, search } = req.query;
+    const { status, is_invoiced, client_id, client, service_type, from, to, pickup_from, pickup_to, search, include_iron_operators } = req.query;
     const { page, limit, skip } = parsePagination(req);
     const resolvedClientId = (client_id || client) as string | undefined;
     const filter: any = { status, client_id: resolvedClientId, service_type, from, to, pickup_from, pickup_to, search };
+
+    if (include_iron_operators !== undefined) {
+      filter.include_iron_operators = String(include_iron_operators).toLowerCase() === "true" || String(include_iron_operators) === "1";
+    }
 
     if (is_invoiced !== undefined) {
       filter.is_invoiced = String(is_invoiced).toLowerCase() === "true" || String(is_invoiced) === "1";
@@ -809,9 +813,33 @@ export const exportOrdersFlat = async (req: Request, res: Response) => {
       history: { status: string; note: string | null }[],
       status: string
     ): string => {
-      const entry = history.find((h) => h.status === status && h.note);
+      const reversed = [...history].reverse();
+      const machineEntry = reversed.find(
+        (h) => h.status === status && h.note && /^Machine:/i.test(h.note.trim())
+      );
+      if (machineEntry?.note) {
+        return String(machineEntry.note).replace(/^Machine:\s*/i, "").trim();
+      }
+      const fallback = reversed.find(
+        (h) =>
+          h.status === status &&
+          h.note &&
+          !/^Operators:/i.test(h.note.trim()) &&
+          !/^Status updated to/i.test(h.note.trim())
+      );
+      if (!fallback?.note) return "";
+      return String(fallback.note).replace(/^Machine:\s*/i, "").trim();
+    };
+
+    const extractOperators = (
+      history: { status: string; note: string | null }[],
+      status: string
+    ): string => {
+      const entry = [...history]
+        .reverse()
+        .find((h) => h.status === status && h.note && /^Operators:/i.test(h.note.trim()));
       if (!entry?.note) return "";
-      return String(entry.note).replace(/^Machine:\s*/i, "").trim();
+      return String(entry.note).replace(/^Operators:\s*/i, "").trim();
     };
 
     const formatTimestamp = (entry: { changed_at: string | null } | null): string => {
@@ -854,6 +882,7 @@ export const exportOrdersFlat = async (req: Request, res: Response) => {
       "Washing Machine",
       "Drying Machine",
       "Ironing Machine",
+      "Ironing Operator",
       "Quality Check By",
       "Timestamp Arrived",
       "Timestamp Ironing",
@@ -898,6 +927,7 @@ export const exportOrdersFlat = async (req: Request, res: Response) => {
         extractMachine(history, "washing"),
         extractMachine(history, "drying"),
         extractMachine(history, "ironing"),
+        extractOperators(history, "ironing"),
         qcEntry?.user_name ?? "",
         formatTimestamp(arrivedEntry),
         formatTimestamp(ironingEntry),
