@@ -64,7 +64,7 @@ export class MachineService {
     await MachineRepository.delete(id);
   }
 
-  static async assignMachine(id: EntityId, orderId: EntityId, userId?: EntityId) {
+  static async assignMachine(id: EntityId, orderId: EntityId, userId?: EntityId, role?: string) {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -78,6 +78,16 @@ export class MachineService {
       // Verify order exists
       const order = await OrderRepository.findById(orderId, conn);
       if (!order) throw Object.assign(new Error("Order not found"), { status: 404 });
+
+      if (role === "operator") {
+        if (machine.type !== "iron") {
+          throw Object.assign(new Error("Operators can only assign iron machines."), { status: 403 });
+        }
+        const orderStatusNorm = String(order.status || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+        if (orderStatusNorm !== OrderStatus.IRONING) {
+          throw Object.assign(new Error("Operators can only assign machines to orders in the ironing stage."), { status: 403 });
+        }
+      }
 
       // If order is currently assigned to another machine, release it from that machine first
       const existingAssignedMachine = await MachineRepository.findByOrderId(orderId, conn);
@@ -126,9 +136,22 @@ export class MachineService {
     }
   }
 
-  static async releaseMachine(id: EntityId, orderId?: EntityId) {
+  static async releaseMachine(id: EntityId, orderId?: EntityId, role?: string) {
     const machine = await MachineRepository.findById(id);
     if (!machine) throw Object.assign(new Error("Machine not found"), { status: 404 });
+
+    if (role === "operator") {
+      if (machine.type !== "iron") {
+        throw Object.assign(new Error("Operators can only release iron machines."), { status: 403 });
+      }
+      if (orderId) {
+        const order = await OrderRepository.findById(orderId);
+        const orderStatusNorm = String(order?.status || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+        if (order && orderStatusNorm !== OrderStatus.IRONING) {
+          throw Object.assign(new Error("Operators can only release machines for orders in the ironing stage."), { status: 403 });
+        }
+      }
+    }
 
     if (orderId) {
       await MachineRepository.releaseOrder(id, orderId);

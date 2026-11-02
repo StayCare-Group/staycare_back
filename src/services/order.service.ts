@@ -134,7 +134,7 @@ export class OrderService {
 
     for (const item of items) {
       const existing = itemsWithFrozenPrice.find(i => String(i.item_id) === String(item.item_id));
-      
+
       let unitPrice: number;
       let itemCode: string;
       let name: string;
@@ -544,11 +544,11 @@ export class OrderService {
     // A rollback occurs when both the current and target statuses are within the
     // processing pipeline AND the target index is earlier than the current index.
     const currentPipelineIdx = PROCESSING_PIPELINE.indexOf(order.status as OrderStatus);
-    const targetPipelineIdx  = PROCESSING_PIPELINE.indexOf(status);
+    const targetPipelineIdx = PROCESSING_PIPELINE.indexOf(status);
     const isRollback =
       currentPipelineIdx !== -1 &&
-      targetPipelineIdx  !== -1 &&
-      targetPipelineIdx  < currentPipelineIdx;
+      targetPipelineIdx !== -1 &&
+      targetPipelineIdx < currentPipelineIdx;
 
     if (isRollback) {
       // Only admin and staff can roll back processing stages
@@ -569,6 +569,13 @@ export class OrderService {
       OrderStatus.QUALITY_CHECK,
       OrderStatus.READY_TO_DELIVERY,
     ]);
+
+    const currentStatusNorm = String(order.status || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    if (role === "operator") {
+      if (currentStatusNorm !== OrderStatus.IRONING || status !== OrderStatus.QUALITY_CHECK) {
+        throw new AppError("Operators can only move orders from ironing to quality_check.", 403);
+      }
+    }
 
     if (STAFF_ONLY_STATUSES.has(status) && role !== "staff" && role !== "admin" && role !== "operator") {
       throw new Error(`Only staff or operator can set order status to ${status}`);
@@ -738,57 +745,57 @@ export class OrderService {
   }
 
   static async receiveAtFacility(orderId: string, data: any, userId: string, role: string) {
-    if (role !== "staff" && role !== "admin" && role !== "operator") {
-      throw new Error("Only staff or operator can receive orders at facility");
-    }
-
-    // Si el staff envía items, usamos la lógica de recepción completa que recalcula todo
-    if (data.items && Array.isArray(data.items)) {
-      return this.receiveInPlant(orderId, userId, {
-        staff_confirmed_bags: data.staff_confirmed_bags || data.actual_bags || 1,
-        special_notes: data.special_notes,
-        items: data.items,
-      });
-    }
-
-    const conn = await pool.getConnection();
-    try {
-      await conn.beginTransaction();
-
-      await MachineRepository.releaseOrderByOrderId(orderId, conn);
-
-      const order = await OrderRepository.findById(orderId, conn);
-      const incomingNote = data.special_notes;
-      const updatedNotes = appendNote(order?.special_notes, incomingNote, "arrived");
-
-      const updateData: Partial<IOrderMySQL> = {
-        status: OrderStatus.ARRIVED,
-      };
-
-      if (updatedNotes !== (order?.special_notes ?? null)) {
-        updateData.special_notes = updatedNotes;
+      if (role !== "staff" && role !== "admin") {
+        throw new AppError("Only staff or admin can receive orders at facility", 403);
       }
 
-      await OrderRepository.update(orderId, updateData, conn);
-      await OrderRepository.insertHistory(conn, {
-        order_id: orderId,
-        changed_by_user_id: userId,
-        is_system: false,
-        status: OrderStatus.ARRIVED,
-        note: "Received at facility (Status update only)",
-      });
+      // Si el staff envía items, usamos la lógica de recepción completa que recalcula todo
+      if (data.items && Array.isArray(data.items)) {
+        return this.receiveInPlant(orderId, userId, {
+          staff_confirmed_bags: data.staff_confirmed_bags || data.actual_bags || 1,
+          special_notes: data.special_notes,
+          items: data.items,
+        });
+      }
 
-      await conn.commit();
-      const result = await this.getOrderById(orderId, conn);
-      this.notifyClientOfStatus(orderId, OrderStatus.ARRIVED);
-      return result;
-    } catch (error) {
-      await conn.rollback();
-      throw error;
-    } finally {
-      conn.release();
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+
+        await MachineRepository.releaseOrderByOrderId(orderId, conn);
+
+        const order = await OrderRepository.findById(orderId, conn);
+        const incomingNote = data.special_notes;
+        const updatedNotes = appendNote(order?.special_notes, incomingNote, "arrived");
+
+        const updateData: Partial<IOrderMySQL> = {
+          status: OrderStatus.ARRIVED,
+        };
+
+        if (updatedNotes !== (order?.special_notes ?? null)) {
+          updateData.special_notes = updatedNotes;
+        }
+
+        await OrderRepository.update(orderId, updateData, conn);
+        await OrderRepository.insertHistory(conn, {
+          order_id: orderId,
+          changed_by_user_id: userId,
+          is_system: false,
+          status: OrderStatus.ARRIVED,
+          note: "Received at facility (Status update only)",
+        });
+
+        await conn.commit();
+        const result = await this.getOrderById(orderId, conn);
+        this.notifyClientOfStatus(orderId, OrderStatus.ARRIVED);
+        return result;
+      } catch (error) {
+        await conn.rollback();
+        throw error;
+      } finally {
+        conn.release();
+      }
     }
-  }
 
   static async confirmCollection(orderId: string, userId: string, role: string) {
     if (role !== "driver" && role !== "admin" && role !== "staff") {
@@ -1161,7 +1168,7 @@ export class OrderService {
           const order = await OrderRepository.findById(orderId);
           if (order) {
             const currentPipelineIdx = PROCESSING_PIPELINE.indexOf(order.status as OrderStatus);
-            const targetPipelineIdx  = PROCESSING_PIPELINE.indexOf(status);
+            const targetPipelineIdx = PROCESSING_PIPELINE.indexOf(status);
             if (currentPipelineIdx !== -1 && targetPipelineIdx !== -1 && targetPipelineIdx < currentPipelineIdx) {
               return this.updateStatus(orderId, status, userId, role, payload.note, payload.special_notes);
             }

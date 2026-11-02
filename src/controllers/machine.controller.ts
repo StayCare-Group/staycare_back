@@ -250,7 +250,7 @@ export const assignMachine = async (req: Request, res: Response) => {
     if (!order_id) return sendError(res, 400, "order_id is required");
 
     const userId = req.user?.userId;
-    const machine = await MachineService.assignMachine(req.params.id as string, String(order_id), userId);
+    const machine = await MachineService.assignMachine(req.params.id as string, String(order_id), userId, req.user?.role);
     return sendSuccess(res, 200, "Machine assigned", machine);
   } catch (error: any) {
     const status = error.status ?? 400;
@@ -281,7 +281,7 @@ export const assignMachine = async (req: Request, res: Response) => {
 export const releaseMachine = async (req: Request, res: Response) => {
   try {
     const orderId = (req.body?.order_id || req.query?.order_id) as string | undefined;
-    const machine = await MachineService.releaseMachine(req.params.id as string, orderId);
+    const machine = await MachineService.releaseMachine(req.params.id as string, orderId, req.user?.role);
     return sendSuccess(res, 200, "Machine released", machine);
   } catch (error: any) {
     const status = error.status ?? 400;

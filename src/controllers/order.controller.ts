@@ -391,7 +391,8 @@ export const advanceOrderStatus = async (req: Request, res: Response) => {
     const order = await OrderService.advanceStatus(orderId as string, status, payload, userId, req.user!.role);
     return sendSuccess(res, 200, "Order status updated", order);
   } catch (error: any) {
-    return sendError(res, 400, error.message || "Status update failed");
+    if (error instanceof AppError) return sendError(res, error.statusCode, error.message);
+    return sendError(res, error.statusCode ?? 400, error.message || "Status update failed");
   }
 };
 

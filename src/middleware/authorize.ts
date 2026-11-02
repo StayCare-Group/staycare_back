@@ -42,6 +42,11 @@ export const authorizePermission =
       return next();
     }
 
+    // Operator can read orders for the facility processing board
+    if (req.user.role === "operator" && permission === "orders:read") {
+      return next();
+    }
+
     // Main client account has full client permissions implicitly
     if (req.user.role === "client" && !req.user.parentClientId) {
       return next();
