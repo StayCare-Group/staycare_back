@@ -215,7 +215,7 @@ export const deleteMachine = async (req: Request, res: Response) => {
  * @swagger
  * /api/machines/{id}/assign:
  *   post:
- *     summary: Asignar una máquina a un pedido (admin / staff)
+ *     summary: Asignar una máquina a un pedido (admin / staff / operator solo planchas en ironing)
  *     description: Cambia el estado de la máquina a `running` y registra el pedido y hora de inicio.
  *     tags: [Machines]
  *     security:
@@ -262,7 +262,7 @@ export const assignMachine = async (req: Request, res: Response) => {
  * @swagger
  * /api/machines/{id}/release:
  *   post:
- *     summary: Liberar una máquina (admin / staff)
+ *     summary: Liberar una máquina (admin / staff / operator solo planchas en ironing)
  *     description: Cambia el estado a `available` y limpia el pedido asignado y hora de inicio.
  *     tags: [Machines]
  *     security:

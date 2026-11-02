@@ -286,3 +286,106 @@ describe("Operator Role Permissions and Processing Restrictions", () => {
     });
   });
 });
+
+describe("Staff Role Permissions and Restrictions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("allows staff on orders:read, orders:create, orders:update and blocks staff on orders:delete", () => {
+    const next = vi.fn();
+    const res: any = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn().mockReturnThis(),
+    };
+    const req: any = {
+      user: { userId: "staff-1", role: "staff", permissions: [] },
+    };
+
+    authorizePermission("orders:read")(req, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+
+    authorizePermission("orders:create")(req, res, next);
+    expect(next).toHaveBeenCalledTimes(2);
+
+    authorizePermission("orders:update")(req, res, next);
+    expect(next).toHaveBeenCalledTimes(3);
+
+    next.mockClear();
+    authorizePermission("orders:delete")(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it("blocks staff from editing orders generally or in non-quality_check statuses", async () => {
+    vi.mocked(OrderRepository.findById).mockResolvedValueOnce({
+      id: "ord-1",
+      status: OrderStatus.PENDING,
+      is_invoiced: false,
+      client_id: "client-1",
+    } as any);
+
+    await expect(
+      OrderService.updateOrder("ord-1", { special_notes: "test" }, "staff-1", "staff")
+    ).rejects.toThrow(/Staff cannot edit orders/);
+
+    vi.mocked(OrderRepository.findById).mockResolvedValueOnce({
+      id: "ord-2",
+      status: OrderStatus.QUALITY_CHECK,
+      is_invoiced: false,
+      client_id: "client-1",
+    } as any);
+
+    await expect(
+      OrderService.updateOrder("ord-2", { special_notes: "test" }, "staff-1", "staff")
+    ).rejects.toThrow(/Staff cannot edit orders/);
+  });
+
+  it("blocks staff from rescheduling, cancelling, reassigning, or confirming driver pickup/delivery/collection", async () => {
+    vi.mocked(OrderRepository.findById).mockResolvedValue({
+      id: "ord-1",
+      status: OrderStatus.PENDING,
+      is_invoiced: false,
+      client_id: "client-1",
+    } as any);
+
+    await expect(
+      OrderService.rescheduleOrder(
+        "ord-1",
+        {
+          pickup_date: "2099-12-31",
+          pickup_window: {
+            start_time: "2099-12-31T08:00:00Z",
+            end_time: "2099-12-31T10:00:00Z",
+          },
+        },
+        "staff-1",
+        "staff"
+      )
+    ).rejects.toThrow(/do not have permission to reschedule/);
+
+    await expect(
+      OrderService.deleteOrder("ord-1", "staff-1", "staff")
+    ).rejects.toThrow(/Only administrators or clients can cancel orders/);
+
+    await expect(
+      OrderService.advanceStatus("ord-1", OrderStatus.CANCELLED, {}, "staff-1", "staff")
+    ).rejects.toThrow(/Staff cannot cancel orders/);
+
+    await expect(
+      OrderService.reassignOrder("ord-1", "driver-1", "staff-1", "staff")
+    ).rejects.toThrow(/Only administrators can reassign orders/);
+
+    await expect(
+      OrderService.confirmPickup("ord-1", { actual_bags: 1 }, "staff-1", "staff")
+    ).rejects.toThrow(/Only drivers or admin can confirm pickups/);
+
+    await expect(
+      OrderService.confirmCollection("ord-1", "staff-1", "staff")
+    ).rejects.toThrow(/Only drivers or admin can confirm collection/);
+
+    await expect(
+      OrderService.confirmDelivery("ord-1", { packages_delivered: 1 }, "staff-1", "staff")
+    ).rejects.toThrow(/Only drivers or admin can confirm delivery/);
+  });
+});

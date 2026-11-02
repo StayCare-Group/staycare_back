@@ -22,8 +22,8 @@ This repository is the REST API. The web client is the separate
 | Role | Description |
 | :-- | :-- |
 | `admin` | Full access |
-| `staff` | Plant operation, clients, orders, invoices |
-| `operator` | Internal plant operator |
+| `staff` | Plant reception & processing, order viewing & creation (`orders:read`, `orders:create`, `quality_check` condition updates); no order editing/rescheduling/cancellation/CSV export, and no routes or driver confirmations |
+| `operator` | Plant processing board view (`orders:read`, `GET /api/machines`); can only assign/release `iron` machines in `ironing` and advance `ironing → quality_check` |
 | `driver` | Assigned routes, pickup/delivery actions |
 | `client` | Own orders, invoices, properties, price list |
 

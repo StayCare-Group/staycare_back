@@ -29,8 +29,10 @@ Full business context: `docs/PROJECT_CONTEXT.md`. Architecture detail:
   (`orders:create|read|update|delete`). Their JWT carries `parentClientId` and
   `permissions`.
 - `authorize(...roles)` checks roles (sub-users pass as `client`).
-- `authorizePermission(perm)` lets `admin`/`staff` and the main client account
-  through, and checks `permissions` for everyone else.
+- `authorize(...roles)` checks roles (sub-users pass as `client`).
+- `authorizePermission(perm)` lets `admin` and the main client account through, grants `orders:read`, `orders:create`, and `orders:update` (restricted in `OrderService.updateOrder` to item condition counts during `quality_check`) to `staff`, grants `orders:read` to `operator`, and checks `permissions` for everyone else.
+- `staff` has full plant reception (`receiveAtFacility`) and processing (`updateStatus`, rollbacks, machine management) permissions, can view and create orders, but cannot edit/reschedule/cancel/export orders, manage routes, or confirm driver pickups/collections/deliveries.
+- `operator` is restricted in `OrderService` and `MachineService` to only advancing orders from `ironing → quality_check` and assigning/releasing `iron` machines for orders in `ironing`.
 - Per-status role rules for order transitions are validated **inside the
   service** (`OrderService.advanceStatus`), not only in routes.
 

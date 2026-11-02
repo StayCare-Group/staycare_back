@@ -94,6 +94,7 @@ export const createOrder = async (req: Request, res: Response) => {
  *     summary: Listar pedidos (paginado + filtros)
  *     description: |
  *       - **admin / staff**: ven todos los pedidos. Pueden filtrar por `client_id`.
+ *       - **operator**: lectura de pedidos para el tablero de procesamiento en planta.
  *       - **driver**: ve solo los pedidos asignados a él.
  *       - **client**: filtro automático por su perfil de cliente.
  *     tags: [Orders]
@@ -314,7 +315,8 @@ export const updateOrder = async (req: Request, res: Response) => {
  *       |---|---|---|
  *       | `transit` | driver, admin | `actual_bags` (req), `photos`?, `notes`? |
  *       | `arrived` | staff, admin | `internal_notes`? |
- *       | `washing` `drying` `ironing` `quality_check` `ready_to_delivery` | staff, admin | `note`? |
+ *       | `washing` `drying` `ironing` `ready_to_delivery` | staff, admin | `note`? |
+ *       | `quality_check` | staff, admin, operator (solo desde `ironing`) | `note`? |
  *       | `collected` | driver, admin | — |
  *       | `delivered` | driver, admin | `photos`?, `notes`? |
  *       | `pending` `cancelled` `completed` `invoiced` `assigned` | admin, staff | `note`? |

@@ -441,6 +441,15 @@ export class OrderService {
       "in_transit",
     ]);
 
+    if (role === "staff") {
+      const dataKeys = Object.keys(data || {});
+      const isOnlyItemsUpdate =
+        dataKeys.length === 1 && dataKeys[0] === "items" && Array.isArray(data.items);
+      if (statusRaw !== OrderStatus.QUALITY_CHECK || !isOnlyItemsUpdate) {
+        throw new AppError("Forbidden: Staff cannot edit orders.", 403);
+      }
+    }
+
     if (role && !isAdminOrStaff && !PRE_RECEIVE_STATUSES.has(statusRaw as any)) {
       throw new AppError("Cannot modify order: Once the order has been received at the facility, editing is restricted to admin and staff.", 400);
     }
@@ -569,6 +578,10 @@ export class OrderService {
       OrderStatus.QUALITY_CHECK,
       OrderStatus.READY_TO_DELIVERY,
     ]);
+
+    if (status === OrderStatus.CANCELLED && role === "staff") {
+      throw new AppError("Forbidden: Staff cannot cancel orders.", 403);
+    }
 
     const currentStatusNorm = String(order.status || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
     if (role === "operator") {
@@ -709,8 +722,8 @@ export class OrderService {
     userId: string,
     role: string
   ) {
-    if (role !== "driver" && role !== "admin" && role !== "staff") {
-      throw new Error("Only drivers, staff or admin can confirm pickups");
+    if (role !== "driver" && role !== "admin") {
+      throw new AppError("Only drivers or admin can confirm pickups", 403);
     }
 
     // ── Single-order path (backward compatible) ──────────────────────────────
@@ -798,8 +811,8 @@ export class OrderService {
     }
 
   static async confirmCollection(orderId: string, userId: string, role: string) {
-    if (role !== "driver" && role !== "admin" && role !== "staff") {
-      throw new Error("Only drivers, staff or admin can confirm collection from facility");
+    if (role !== "driver" && role !== "admin") {
+      throw new AppError("Only drivers or admin can confirm collection from facility", 403);
     }
     const conn = await pool.getConnection();
     try {
@@ -940,8 +953,8 @@ export class OrderService {
     userId: string,
     role: string
   ) {
-    if (role !== "driver" && role !== "admin" && role !== "staff") {
-      throw new Error("Only drivers, staff or admin can confirm delivery");
+    if (role !== "driver" && role !== "admin") {
+      throw new AppError("Only drivers or admin can confirm delivery", 403);
     }
 
     // ── Single-order path (backward compatible) ──────────────────────────────
@@ -983,6 +996,10 @@ export class OrderService {
     const order = await OrderRepository.findById(orderId);
     if (!order) {
       throw new AppError("Order not found", 404);
+    }
+
+    if (role && role !== "admin" && role !== "client") {
+      throw new AppError("Forbidden: You do not have permission to reschedule this order.", 403);
     }
 
     if (role === "client" && String(order.client_id) !== String(userId)) {
@@ -1034,8 +1051,8 @@ export class OrderService {
     routeDateInput?: string,
     areaInput?: string,
   ) {
-    if (role !== "admin" && role !== "staff") {
-      throw new Error("Only administrators and staff can reassign orders");
+    if (role !== "admin") {
+      throw new AppError("Only administrators can reassign orders", 403);
     }
     const conn = await pool.getConnection();
     try {
@@ -1135,6 +1152,7 @@ export class OrderService {
    *   washing/drying/
    *   ironing/quality_check/
    *   ready_to_delivery  → staff, admin
+   *   quality_check      → staff, admin, operator (solo desde ironing)
    *   collected          → driver, admin
    *   delivered          → driver, admin       (+ photos, notes)
    *   assigned/pending/
@@ -1199,9 +1217,12 @@ export class OrderService {
     const effectiveClientId = parentClientId ?? userId;
     const isClientContext = role === "client" || !!parentClientId;
 
-    if (role !== "admin" && role !== "staff") {
+    if (role !== "admin") {
       if (isClientContext && String(order.client_id) !== String(effectiveClientId)) {
         throw new AppError("Forbidden: You can only cancel orders belonging to your client account.", 403);
+      }
+      if (!isClientContext) {
+        throw new AppError("Forbidden: Only administrators or clients can cancel orders.", 403);
       }
     }
 

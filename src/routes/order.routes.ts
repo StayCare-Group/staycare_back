@@ -33,20 +33,20 @@ router.use(authenticate);
 // ─── Export (must come before /:id to avoid route conflict) ─────────────────
 router.post(
   "/export",
-  authorize("admin", "staff", "client"),
+  authorize("admin", "client"),
   authorizePermission("orders:read"),
   exportOrdersFlat,
 );
 router.post(
   "/export/stained",
-  authorize("admin", "staff"),
+  authorize("admin"),
   exportOrdersStained,
 );
 
 // ─── Bulk driver confirm (must come before /:id to avoid route conflict) ─────
 router.patch(
   "/bulk/deliver",
-  authorize("admin", "driver", "staff"),
+  authorize("admin", "driver"),
   validate(bulkConfirmDriverActionSchema),
   bulkConfirmDriverAction,
 );
@@ -82,6 +82,7 @@ router.patch(
 // ─── Structural operations (no son solo cambio de estado) ────────────────────
 router.patch(
   "/:id/reschedule",
+  authorize("admin", "client"),
   authorizePermission("orders:update"),
   validate(rescheduleOrderSchema),
   rescheduleOrder,
@@ -89,7 +90,7 @@ router.patch(
 
 router.patch(
   "/:id/reassign",
-  authorize("admin", "staff"),
+  authorize("admin"),
   reassignOrder,
 );
 
@@ -101,7 +102,7 @@ router.patch(
 
 router.patch(
   "/:id/deliver",
-  authorize("admin", "driver", "staff"),
+  authorize("admin", "driver"),
   validate(confirmDriverActionSchema),
   confirmDelivery,
 );

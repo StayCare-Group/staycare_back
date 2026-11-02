@@ -22,25 +22,25 @@ router.use(authenticate);
 
 router.post(
   "/",
-  authorize("admin", "staff"),
+  authorize("admin"),
   validate(createRouteSchema),
   createRoute,
 );
 
-router.get("/", getAllRoutes);
+router.get("/", authorize("admin", "driver"), getAllRoutes);
 
-router.get("/:id", getRouteById);
+router.get("/:id", authorize("admin", "driver"), getRouteById);
 
 router.put(
   "/:id",
-  authorize("admin", "staff"),
+  authorize("admin"),
   validate(updateRouteSchema),
   updateRoute,
 );
 
 router.patch(
   "/:id/status",
-  authorize("admin", "staff", "driver"),
+  authorize("admin", "driver"),
   validate(updateRouteStatusSchema),
   updateRouteStatus,
 );

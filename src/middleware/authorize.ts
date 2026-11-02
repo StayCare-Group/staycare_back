@@ -37,8 +37,18 @@ export const authorizePermission =
       });
     }
 
-    // Admin and staff bypass granular permissions
-    if (req.user.role === "admin" || req.user.role === "staff") {
+    // Admin bypasses granular permissions
+    if (req.user.role === "admin") {
+      return next();
+    }
+
+    // Staff can read and create orders, and update item conditions during quality_check (enforced in OrderService.updateOrder)
+    if (
+      req.user.role === "staff" &&
+      (permission === "orders:read" ||
+        permission === "orders:create" ||
+        permission === "orders:update")
+    ) {
       return next();
     }
 
