@@ -248,6 +248,38 @@ describe("Order Exports (exportOrdersFlat & exportOrdersStained)", () => {
       expect(lines[0]).toContain("Washing Machine,Drying Machine,Ironing Machine,Ironing Operator,Quality Check By");
       expect(lines[1]).toContain('Washer #1,Dryer #2,Iron Station #1,"Ana Gómez, Luis Pérez",');
     });
+
+    it("populates Quality Check By with the user that moved the order to ready_to_delivery", async () => {
+      vi.mocked(OrderRepository.findManyForExport).mockResolvedValueOnce([
+        {
+          id: "ord-qc",
+          order_number: "ORD-QC-1",
+          client_name: "Hotel Paradise",
+          property_name: "Villa Sol",
+          created_at: "2026-10-01",
+          pickup_date: "2026-10-02",
+          service_type: "standard",
+          status: "ready_to_delivery",
+          actual_bags: 2,
+          special_notes: "",
+          total: 100,
+          history: [
+            { status: "ironing", note: "Operators: Ana Gómez", changed_at: "2026-10-02T12:00:00Z", user_name: "Operator Ana" },
+            { status: "quality_check", note: "Status updated to quality_check", changed_at: "2026-10-02T12:30:00Z", user_name: "Operator Ana" },
+            { status: "ready_to_delivery", note: "Status updated to ready_to_delivery", changed_at: "2026-10-02T13:00:00Z", user_name: "Inspector Carlos" },
+          ],
+          items: [],
+        },
+      ] as any);
+
+      const req = { body: { ids: ["ord-qc"] }, user: adminUser } as Request;
+      const res = mockResponse();
+
+      await exportOrdersFlat(req, res);
+
+      const lines = (res.body as string).slice(1).split("\n");
+      expect(lines[1]).toContain("Inspector Carlos");
+    });
   });
 
   describe("export by filters (no selection)", () => {

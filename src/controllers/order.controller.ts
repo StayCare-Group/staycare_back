@@ -894,7 +894,7 @@ export const exportOrdersFlat = async (req: Request, res: Response) => {
       const arrivedEntry   = findHistory(history, "received") ?? findHistory(history, "arrived");
       const ironingEntry   = findHistory(history, "ironing");
       const deliveredEntry = findHistory(history, "delivered");
-      const qcEntry        = findHistory(history, "quality_check");
+      const qcApprovedEntry = findHistory(history, "ready_to_delivery");
 
       // Pass 2 (per order): build item quantity map
       const itemQtyMap: Record<string, number> = {};
@@ -926,7 +926,7 @@ export const exportOrdersFlat = async (req: Request, res: Response) => {
         Array.isArray(order.iron_operators) && order.iron_operators.length > 0
           ? order.iron_operators.join(", ")
           : extractOperators(history, "ironing"),
-        qcEntry?.user_name ?? "",
+        qcApprovedEntry?.user_name ?? "",
         formatTimestamp(arrivedEntry),
         formatTimestamp(ironingEntry),
         formatTimestamp(deliveredEntry),
