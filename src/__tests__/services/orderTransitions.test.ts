@@ -182,10 +182,11 @@ describe("Operator Role Permissions and Processing Restrictions", () => {
   });
 
   describe("OrderService.advanceStatus for operator", () => {
-    it("allows operator to advance an order from ironing to quality_check", async () => {
+    it("allows operator to advance an order from ironing to quality_check when operators are assigned", async () => {
       vi.mocked(OrderRepository.findById).mockResolvedValue({
         id: "ord-iron-1",
         status: OrderStatus.IRONING,
+        iron_operators: ["Op 1"],
         is_invoiced: false,
       } as any);
 
@@ -204,6 +205,25 @@ describe("Operator Role Permissions and Processing Restrictions", () => {
       );
     });
 
+    it("rejects operator advancing from ironing to quality_check without operators", async () => {
+      vi.mocked(OrderRepository.findById).mockResolvedValue({
+        id: "ord-iron-1",
+        status: OrderStatus.IRONING,
+        iron_operators: [],
+        is_invoiced: false,
+      } as any);
+
+      await expect(
+        OrderService.advanceStatus(
+          "ord-iron-1",
+          OrderStatus.QUALITY_CHECK,
+          {},
+          "op-1",
+          "operator"
+        )
+      ).rejects.toThrow(/Between 1 and 2 ironing operators must be assigned/);
+    });
+
     it("allows operator to record or update ironing operators note when order is in ironing", async () => {
       vi.mocked(OrderRepository.findById).mockResolvedValue({
         id: "ord-iron-1",
@@ -215,11 +235,16 @@ describe("Operator Role Permissions and Processing Restrictions", () => {
       await OrderService.advanceStatus(
         "ord-iron-1",
         OrderStatus.IRONING,
-        { note: "Operators: Ana Gómez, Luis Pérez" },
+        { iron_operators: ["Ana Gómez", "Luis Pérez"] },
         "op-1",
         "operator"
       );
 
+      expect(OrderRepository.update).toHaveBeenCalledWith(
+        "ord-iron-1",
+        { iron_operators: ["Ana Gómez", "Luis Pérez"] },
+        expect.anything()
+      );
       expect(OrderRepository.updateLatestHistoryNote).toHaveBeenCalledWith(
         expect.anything(),
         "ord-iron-1",
@@ -235,6 +260,24 @@ describe("Operator Role Permissions and Processing Restrictions", () => {
           note: "Operators: Ana Gómez, Luis Pérez",
         })
       );
+    });
+
+    it("rejects assigning more than 2 ironing operators", async () => {
+      vi.mocked(OrderRepository.findById).mockResolvedValue({
+        id: "ord-iron-1",
+        status: OrderStatus.IRONING,
+        is_invoiced: false,
+      } as any);
+
+      await expect(
+        OrderService.advanceStatus(
+          "ord-iron-1",
+          OrderStatus.IRONING,
+          { iron_operators: ["Op 1", "Op 2", "Op 3"] },
+          "op-1",
+          "operator"
+        )
+      ).rejects.toThrow(/Between 1 and 2 ironing operators must be assigned/);
     });
 
     it("blocks operator from advancing orders in other stages (e.g. arrived -> washing, drying -> ironing, quality_check -> ready_to_delivery)", async () => {

@@ -540,7 +540,15 @@ export class OrderService {
     }
   }
 
-  static async updateStatus(orderId: string, status: OrderStatus, userId: string, role: string, note?: string, specialNotes?: string) {
+  static async updateStatus(
+    orderId: string,
+    status: OrderStatus,
+    userId: string,
+    role: string,
+    note?: string,
+    specialNotes?: string,
+    ironOperators?: string[]
+  ) {
     const order = await OrderRepository.findById(orderId);
     if (!order) throw new AppError("Order not found", 404);
 
@@ -584,10 +592,38 @@ export class OrderService {
     }
 
     const currentStatusNorm = String(order.status || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const resolvedIronOperators: string[] | undefined =
+      Array.isArray(ironOperators)
+        ? ironOperators.map((op) => String(op || "").trim()).filter(Boolean)
+        : note && /^Operators:/i.test(note.trim())
+        ? note
+            .trim()
+            .replace(/^Operators:\s*/i, "")
+            .split(",")
+            .map((op) => op.trim())
+            .filter(Boolean)
+        : undefined;
+
+    if (resolvedIronOperators !== undefined) {
+      if (resolvedIronOperators.length < 1 || resolvedIronOperators.length > 2) {
+        throw new AppError("Between 1 and 2 ironing operators must be assigned.", 400);
+      }
+    }
+
+    if (currentStatusNorm === OrderStatus.IRONING && status === OrderStatus.QUALITY_CHECK) {
+      const existingOps = Array.isArray(order.iron_operators) && order.iron_operators.length > 0
+        ? order.iron_operators
+        : undefined;
+      const effectiveOps = resolvedIronOperators ?? existingOps;
+      if (!effectiveOps || effectiveOps.length < 1 || effectiveOps.length > 2) {
+        throw new AppError("Between 1 and 2 ironing operators must be assigned before moving to quality check.", 400);
+      }
+    }
+
     const isIroningOperatorsUpdate =
       currentStatusNorm === OrderStatus.IRONING &&
       status === OrderStatus.IRONING &&
-      Boolean(note && /^Operators:/i.test(note.trim()));
+      resolvedIronOperators !== undefined;
 
     if (role === "operator") {
       if (
@@ -606,23 +642,25 @@ export class OrderService {
     try {
       await conn.beginTransaction();
 
+      const ironingIdx = PROCESSING_PIPELINE.indexOf(OrderStatus.IRONING);
+
       // If this is a rollback, release the machine currently assigned to the order
       // before changing the status. This runs inside the transaction.
       if (isRollback) {
         await MachineRepository.releaseOrderByOrderId(orderId, conn);
-        const ironingIdx = PROCESSING_PIPELINE.indexOf(OrderStatus.IRONING);
         if (targetPipelineIdx < ironingIdx) {
           await OrderRepository.updateLatestHistoryNote(conn, orderId, OrderStatus.IRONING, "Operators: ", userId);
         }
       }
 
-      if (isIroningOperatorsUpdate && note) {
-        const trimmedNote = note.trim();
+      if (isIroningOperatorsUpdate && resolvedIronOperators !== undefined) {
+        const operatorsNote = `Operators: ${resolvedIronOperators.join(", ")}`;
+        await OrderRepository.update(orderId, { iron_operators: resolvedIronOperators }, conn);
         const updated = await OrderRepository.updateLatestHistoryNote(
           conn,
           orderId,
           status,
-          trimmedNote,
+          operatorsNote,
           userId
         );
         if (!updated) {
@@ -631,11 +669,37 @@ export class OrderService {
             changed_by_user_id: userId,
             is_system: false,
             status,
-            note: trimmedNote,
+            note: operatorsNote,
           });
         }
       } else {
         const updateData: Partial<IOrderMySQL> = { status };
+        if (isRollback && targetPipelineIdx < ironingIdx) {
+          updateData.iron_operators = null;
+        } else if (resolvedIronOperators !== undefined) {
+          updateData.iron_operators = resolvedIronOperators;
+        }
+
+        if (currentStatusNorm === OrderStatus.IRONING && resolvedIronOperators && resolvedIronOperators.length > 0) {
+          const operatorsNote = `Operators: ${resolvedIronOperators.join(", ")}`;
+          const updated = await OrderRepository.updateLatestHistoryNote(
+            conn,
+            orderId,
+            OrderStatus.IRONING,
+            operatorsNote,
+            userId
+          );
+          if (!updated) {
+            await OrderRepository.insertHistory(conn, {
+              order_id: orderId,
+              changed_by_user_id: userId,
+              is_system: false,
+              status: OrderStatus.IRONING,
+              note: operatorsNote,
+            });
+          }
+        }
+
         if (specialNotes && specialNotes.trim()) {
           const stageTag = status === OrderStatus.READY_TO_DELIVERY ? "quality_check" : status.toLowerCase();
           const updatedNotes = appendNote(order.special_notes, specialNotes, stageTag);
@@ -644,13 +708,18 @@ export class OrderService {
           }
         }
 
+        const historyNote =
+          status === OrderStatus.IRONING && resolvedIronOperators && resolvedIronOperators.length > 0
+            ? `Operators: ${resolvedIronOperators.join(", ")}`
+            : note || `Status updated to ${status}`;
+
         await OrderRepository.update(orderId, updateData, conn);
         await OrderRepository.insertHistory(conn, {
           order_id: orderId,
           changed_by_user_id: userId,
           is_system: false,
           status,
-          note: note || `Status updated to ${status}`,
+          note: historyNote,
         });
       }
 
@@ -1202,6 +1271,7 @@ export class OrderService {
       staff_confirmed_bags?: number;
       items?: any[];
       note?: string;
+      iron_operators?: string[];
     },
     userId: string,
     role: string
@@ -1220,7 +1290,7 @@ export class OrderService {
             const currentPipelineIdx = PROCESSING_PIPELINE.indexOf(order.status as OrderStatus);
             const targetPipelineIdx = PROCESSING_PIPELINE.indexOf(status);
             if (currentPipelineIdx !== -1 && targetPipelineIdx !== -1 && targetPipelineIdx < currentPipelineIdx) {
-              return this.updateStatus(orderId, status, userId, role, payload.note, payload.special_notes);
+              return this.updateStatus(orderId, status, userId, role, payload.note, payload.special_notes, payload.iron_operators);
             }
           }
         }
@@ -1236,7 +1306,7 @@ export class OrderService {
       default:
         // Covers: pending, washing, drying, ironing, quality_check,
         //         ready_to_delivery, assigned, cancelled, completed
-        return this.updateStatus(orderId, status, userId, role, payload.note, payload.special_notes);
+        return this.updateStatus(orderId, status, userId, role, payload.note, payload.special_notes, payload.iron_operators);
     }
   }
 

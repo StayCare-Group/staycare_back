@@ -86,6 +86,7 @@ export const advanceStatusSchema = z.object({
     items: z.array(orderItemSchema).optional(),
     // Historia de auditoría genérica
     note: z.string().optional(),
+    iron_operators: z.array(z.string().min(1)).min(1).max(2).optional(),
   }),
   params: z.object({ id: uuidIdSchema }),
 });

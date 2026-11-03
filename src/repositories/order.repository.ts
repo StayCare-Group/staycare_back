@@ -74,6 +74,7 @@ export interface IOrderMySQL {
   actual_bags: number | null;
   staff_confirmed_bags: number | null;
   special_notes: string | null;
+  iron_operators?: string[] | null;
   status: OrderStatus;
   is_invoiced: boolean;
   subtotal: number;
@@ -142,6 +143,7 @@ export class OrderRepository {
       ...row,
       is_invoiced: Boolean(row.is_invoiced),
       status: fromDbOrderStatus(row.status),
+      iron_operators: safeParseJsonArray(row.iron_operators),
     } as IOrderMySQL;
   }
 
@@ -161,6 +163,7 @@ export class OrderRepository {
       ...row,
       is_invoiced: Boolean(row.is_invoiced),
       status: fromDbOrderStatus(row.status),
+      iron_operators: safeParseJsonArray(row.iron_operators),
     } as IOrderMySQL;
   }
 
@@ -302,7 +305,11 @@ export class OrderRepository {
     if (entries.length === 0) return;
 
     const setClause = entries.map(([k]) => `${k} = ?`).join(", ");
-    const values = entries.map(([, v]) => (typeof v === "boolean" ? (v ? 1 : 0) : v));
+    const values = entries.map(([, v]) => {
+      if (typeof v === "boolean") return v ? 1 : 0;
+      if (Array.isArray(v)) return JSON.stringify(v);
+      return v;
+    });
     values.push(id);
 
     const exec = conn || pool;
@@ -428,18 +435,6 @@ export class OrderRepository {
       params.push(pattern, pattern);
     }
 
-    const operatorsSelect = filter.include_iron_operators
-      ? `, CASE WHEN (o.status = 'Ironing' OR o.status = 'ironing') THEN (
-                SELECT h.note
-                FROM order_status_history h
-                WHERE h.order_id = o.id
-                  AND (h.status = 'Ironing' OR h.status = 'ironing')
-                  AND h.note LIKE 'Operators:%'
-                ORDER BY h.changed_at DESC
-                LIMIT 1
-              ) ELSE NULL END AS ironing_operators_note`
-      : "";
-
     params.push(limit, offset);
 
     const [rows] = await pool.query<RowDataPacket[]>(
@@ -449,7 +444,7 @@ export class OrderRepository {
               p.address as property_address,
               p.area as property_area,
               p.lat as property_lat,
-              p.lng as property_lng${operatorsSelect}
+              p.lng as property_lng
        FROM orders o
        INNER JOIN users u ON o.client_id = u.id
        LEFT JOIN properties p ON o.property_id = p.id
@@ -464,13 +459,7 @@ export class OrderRepository {
       ...r,
       is_invoiced: Boolean(r.is_invoiced),
       status: fromDbOrderStatus(r.status),
-      iron_operators: r.ironing_operators_note
-        ? String(r.ironing_operators_note)
-            .replace(/^Operators:\s*/i, "")
-            .split(",")
-            .map((s: string) => s.trim())
-            .filter(Boolean)
-        : [],
+      iron_operators: safeParseJsonArray(r.iron_operators),
     }));
   }
 
@@ -546,6 +535,7 @@ export class OrderRepository {
          o.estimated_bags,
          o.actual_bags,
          o.special_notes,
+         o.iron_operators,
          o.total,
          u.name                                          AS client_name,
          p.property_name,
@@ -590,6 +580,7 @@ export class OrderRepository {
       estimated_bags: r.estimated_bags,
       actual_bags:    r.actual_bags,
       special_notes:  r.special_notes,
+      iron_operators: safeParseJsonArray(r.iron_operators),
       total:          r.total,
       client_name:    r.client_name,
       property_name:  r.property_name,
@@ -634,6 +625,7 @@ export interface OrderExportRow {
   estimated_bags: number | null;
   actual_bags: number | null;
   special_notes: string | null;
+  iron_operators?: string[];
   total: number;
   client_name: string;
   property_name: string | null;
