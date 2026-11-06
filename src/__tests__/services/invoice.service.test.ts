@@ -26,6 +26,9 @@ vi.mock("../../repositories/invoice.repository", () => ({
     insertLineItem: vi.fn(),
     linkOrder: vi.fn(),
     findById: vi.fn(async () => ({ id: "inv-1" })),
+    insertPayment: vi.fn(async () => "pay-1"),
+    sumPayments: vi.fn(async () => 100),
+    updateStatus: vi.fn(),
   },
 }));
 
@@ -125,5 +128,68 @@ describe("InvoiceService.createInvoice validations", () => {
       InvoiceService.createInvoice({ ...baseInput, order_ids: ["order-1", "order-1"] }, "admin-1")
     ).rejects.toThrow(/duplicados/);
     expect(OrderRepository.findByIdForUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("InvoiceService.recordPayment", () => {
+  const paymentInput = {
+    amount: 100,
+    method: "card" as const,
+    transaction_reference: "TX-123",
+  };
+
+  const invoiceWithOrders = {
+    id: "inv-1",
+    total: 100,
+    status: "pending",
+    orders: [{ id: "order-1", order_number: "ORD-1", status: "delivered" }],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("passes transactional connection to sumPayments and marks invoice as paid when fully covered", async () => {
+    vi.mocked(InvoiceRepository.findById)
+      .mockResolvedValueOnce(invoiceWithOrders as any)
+      .mockResolvedValueOnce({ ...invoiceWithOrders, status: "paid" } as any);
+    vi.mocked(InvoiceRepository.sumPayments).mockResolvedValueOnce(100);
+
+    const result = await InvoiceService.recordPayment("inv-1", paymentInput, "admin-1");
+
+    expect(InvoiceRepository.insertPayment).toHaveBeenCalledWith(conn, {
+      invoice_id: "inv-1",
+      ...paymentInput,
+    });
+    // Verifies conn is passed to sumPayments (avoids taking another connection from pool)
+    expect(InvoiceRepository.sumPayments).toHaveBeenCalledWith("inv-1", conn);
+    expect(InvoiceRepository.updateStatus).toHaveBeenCalledWith("inv-1", "paid", conn);
+    expect(OrderRepository.update).toHaveBeenCalledWith("order-1", { status: OrderStatus.COMPLETED }, conn);
+    expect(conn.commit).toHaveBeenCalled();
+    expect(conn.release).toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({ status: "paid" }));
+  });
+
+  it("does not update status to paid when partial payment does not reach total", async () => {
+    vi.mocked(InvoiceRepository.findById)
+      .mockResolvedValueOnce({ ...invoiceWithOrders, total: 200 } as any)
+      .mockResolvedValueOnce({ ...invoiceWithOrders, total: 200, status: "pending" } as any);
+    vi.mocked(InvoiceRepository.sumPayments).mockResolvedValueOnce(100);
+
+    await InvoiceService.recordPayment("inv-1", paymentInput, "admin-1");
+
+    expect(InvoiceRepository.updateStatus).not.toHaveBeenCalled();
+    expect(OrderRepository.update).not.toHaveBeenCalled();
+    expect(conn.commit).toHaveBeenCalled();
+    expect(conn.release).toHaveBeenCalled();
+  });
+
+  it("rejects recording payment on already paid invoices", async () => {
+    vi.mocked(InvoiceRepository.findById).mockResolvedValueOnce({ ...invoiceWithOrders, status: "paid" } as any);
+
+    await expect(InvoiceService.recordPayment("inv-1", paymentInput, "admin-1")).rejects.toThrow(
+      /already fully paid/
+    );
+    expect(InvoiceRepository.insertPayment).not.toHaveBeenCalled();
   });
 });

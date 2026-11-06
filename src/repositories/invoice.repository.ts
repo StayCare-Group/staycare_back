@@ -340,8 +340,9 @@ export class InvoiceRepository {
   }
 
   /** Suma total pagado de una factura */
-  static async sumPayments(invoiceId: EntityId): Promise<number> {
-    const [rows] = await pool.execute<RowDataPacket[]>(
+  static async sumPayments(invoiceId: EntityId, conn?: PoolConnection): Promise<number> {
+    const exec = conn ?? pool;
+    const [rows] = await exec.execute<RowDataPacket[]>(
       `SELECT COALESCE(SUM(amount), 0) AS paid FROM invoice_payments WHERE invoice_id = ?`,
       [invoiceId]
     );

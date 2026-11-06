@@ -26,6 +26,7 @@ export class InvoiceService {
     vat_amount: number;
     total: number;
   }, userId: EntityId) {
+    let invoiceId: EntityId;
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -97,7 +98,7 @@ export class InvoiceService {
 
       const invoiceVatPercentage = calculatedVatAmount > 0 ? (data.vat_percentage ?? 18) : 0;
 
-      const invoiceId = await InvoiceRepository.insert(conn, {
+      invoiceId = await InvoiceRepository.insert(conn, {
         invoice_number: invoiceNumber,
         client_id: resolvedClientId,
         issue_date: issueDate,
@@ -145,13 +146,14 @@ export class InvoiceService {
       }
 
       await conn.commit();
-      return InvoiceRepository.findById(invoiceId);
     } catch (error) {
       await conn.rollback();
       throw error;
     } finally {
       conn.release();
     }
+
+    return InvoiceRepository.findById(invoiceId);
   }
 
   static async createAutomaticInvoice(orderId: EntityId, userId: EntityId) {
@@ -227,7 +229,7 @@ export class InvoiceService {
         ...payment,
       });
 
-      const totalPaid = await InvoiceRepository.sumPayments(invoiceId);
+      const totalPaid = await InvoiceRepository.sumPayments(invoiceId, conn);
 
       if (totalPaid >= invoice.total) {
         await InvoiceRepository.updateStatus(invoiceId, "paid", conn);
@@ -246,13 +248,14 @@ export class InvoiceService {
       }
 
       await conn.commit();
-      return InvoiceRepository.findById(invoiceId);
     } catch (error) {
       await conn.rollback();
       throw error;
     } finally {
       conn.release();
     }
+
+    return InvoiceRepository.findById(invoiceId);
   }
 
   static async markOverdue(): Promise<number> {

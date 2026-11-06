@@ -130,6 +130,38 @@ describe("Order Exports (exportOrdersFlat & exportOrdersStained)", () => {
       // Check row 2 (ORD-002)
       expect(lines[2]).toBe('ORD-002,Hostel Central,,2026-10-02,,5,0,0');
     });
+
+    it("includes every active catalog item as a column, zero-filled when not stained", async () => {
+      vi.mocked(ItemRepository.findAll).mockResolvedValueOnce([
+        { name: "Towel" },
+        { name: "Sheet" },
+        { name: "Napkin" },
+      ] as any);
+      vi.mocked(OrderRepository.findManyForExport).mockResolvedValueOnce([
+        {
+          id: "ord-1",
+          order_number: "ORD-001",
+          client_name: "Hotel Paradise",
+          property_name: null,
+          created_at: "2026-10-01",
+          special_notes: null,
+          items: [
+            { name: "Towel", qty_good: 3, qty_bad: 0, qty_stained: 2, quantity: 5 },
+            { name: "Legacy Robe", qty_good: 1, qty_bad: 0, qty_stained: 1, quantity: 2 },
+          ],
+        },
+      ] as any);
+
+      const req = { body: { ids: ["ord-1"] } } as Request;
+      const res = mockResponse();
+
+      await exportOrdersStained(req, res);
+
+      const lines = (res.body as string).slice(1).split("\n");
+      // Sorted columns: Legacy Robe (from order), Napkin, Sheet, Towel
+      expect(lines[0]!.endsWith("Legacy Robe,Napkin,Sheet,Towel")).toBe(true);
+      expect(lines[1]!.endsWith(",1,0,0,2")).toBe(true);
+    });
   });
 
   describe("exportOrdersFlat", () => {
@@ -278,6 +310,7 @@ describe("Order Exports (exportOrdersFlat & exportOrdersStained)", () => {
       await exportOrdersFlat(req, res);
 
       const lines = (res.body as string).slice(1).split("\n");
+      expect(lines[0]).toContain("Timestamp Quality Check");
       expect(lines[1]).toContain("Inspector Carlos");
     });
   });

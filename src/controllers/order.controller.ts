@@ -78,7 +78,7 @@ export const createOrder = async (req: Request, res: Response) => {
   try {
     const effectiveClientId = req.user!.parentClientId || req.user!.userId;
     const isClientContext = req.user!.role === "client" || !!req.user!.parentClientId;
-    
+
     const body = isClientContext ? { ...req.body, client_id: effectiveClientId } : req.body;
     const order = await OrderService.createOrder(body, effectiveClientId, req.user!.role);
     return sendSuccess(res, 201, "Order created", order);
@@ -670,7 +670,7 @@ export const confirmDelivery = async (req: Request, res: Response) => {
 export const bulkConfirmDriverAction = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const role   = req.user!.role;
+    const role = req.user!.role;
     const { action, orders, received_by, special_notes, photos } = req.body as {
       action: "pickup" | "delivery";
       orders: { id: string; actual_bags?: number; packages_delivered?: number; special_notes?: string }[];
@@ -882,6 +882,7 @@ export const exportOrdersFlat = async (req: Request, res: Response) => {
       "Quality Check By",
       "Timestamp Arrived",
       "Timestamp Ironing",
+      "Timestamp Quality Check",
       "Timestamp Delivered",
     ];
 
@@ -891,8 +892,9 @@ export const exportOrdersFlat = async (req: Request, res: Response) => {
     for (const order of rows) {
       const history = order.history;
 
-      const arrivedEntry   = findHistory(history, "received") ?? findHistory(history, "arrived");
-      const ironingEntry   = findHistory(history, "ironing");
+      const arrivedEntry = findHistory(history, "received") ?? findHistory(history, "arrived");
+      const ironingEntry = findHistory(history, "ironing");
+      const qualityCheckEntry = findHistory(history, "quality_check");
       const deliveredEntry = findHistory(history, "delivered");
       const qcApprovedEntry = findHistory(history, "ready_to_delivery");
 
@@ -929,17 +931,18 @@ export const exportOrdersFlat = async (req: Request, res: Response) => {
         qcApprovedEntry?.user_name ?? "",
         formatTimestamp(arrivedEntry),
         formatTimestamp(ironingEntry),
+        formatTimestamp(qualityCheckEntry),
         formatTimestamp(deliveredEntry),
       ];
 
       const itemValues = itemNames.map((name) => itemQtyMap[name] ?? 0);
-      const rowValues  = [...fixedValues, ...itemValues];
+      const rowValues = [...fixedValues, ...itemValues];
 
       csvLines.push(rowValues.map(escapeCsv).join(","));
     }
 
-    const csv      = csvLines.join("\n");
-    const dateStr  = new Date().toISOString().slice(0, 10);
+    const csv = csvLines.join("\n");
+    const dateStr = new Date().toISOString().slice(0, 10);
     const filename = `Ordenes-Resumen-StayCare-${dateStr}.csv`;
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -985,9 +988,16 @@ export const exportOrdersStained = async (req: Request, res: Response) => {
       return str;
     };
 
-    // ── Pass 1: collect all unique item names across selected orders ──────────
+    // ── Pass 1: item columns = full active catalog + any item found in the orders ──
+    // Catalog first so the layout is standard for every role; order items are added
+    // too so deactivated / legacy items from past orders are never dropped.
 
     const itemNamesSet = new Set<string>();
+    const catalogItems = await ItemRepository.findAll(true);
+    for (const catalogItem of catalogItems) {
+      const name = catalogItem.name?.trim();
+      if (name) itemNamesSet.add(name);
+    }
     for (const order of rows) {
       for (const item of order.items) {
         const name = item.name?.trim();
@@ -1028,13 +1038,13 @@ export const exportOrdersStained = async (req: Request, res: Response) => {
       ];
 
       const itemValues = itemNames.map((name) => itemStainedMap[name] ?? 0);
-      const rowValues  = [...fixedValues, ...itemValues];
+      const rowValues = [...fixedValues, ...itemValues];
 
       csvLines.push(rowValues.map(escapeCsv).join(","));
     }
 
-    const csv      = csvLines.join("\n");
-    const dateStr  = new Date().toISOString().slice(0, 10);
+    const csv = csvLines.join("\n");
+    const dateStr = new Date().toISOString().slice(0, 10);
     const filename = `Ordenes-Manchados-StayCare-${dateStr}.csv`;
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
