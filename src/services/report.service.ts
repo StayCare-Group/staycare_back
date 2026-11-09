@@ -1,6 +1,70 @@
 import { ReportRepository, type OrderSlaHistory } from "../repositories/report.repository";
+import { getBusinessDateRangeUtc } from "../utils/businessDate";
+import {
+  OrderStatus,
+  PENDING_ITEM_ORDER_STATUSES,
+  PROCESSING_ITEM_ORDER_STATUSES,
+  DELIVERED_ITEM_ORDER_STATUSES,
+} from "../types/orderStatus";
+
+export interface DashboardOverviewQuery {
+  /** Inclusive business calendar day (YYYY-MM-DD, Malta). */
+  from: string;
+  /** Inclusive business calendar day (YYYY-MM-DD, Malta). */
+  to: string;
+  clientId?: string | undefined;
+}
+
+export interface DashboardOverview {
+  ordersReceived: number;
+  itemsTotal: number;
+  itemsPending: number;
+  itemsProcessed: number;
+  itemsDelivered: number;
+}
 
 export class ReportService {
+  static async getDashboardOverview({ from, to, clientId }: DashboardOverviewQuery): Promise<DashboardOverview> {
+    const { start, endExclusive } = getBusinessDateRangeUtc(from, to);
+    const { ordersByStatus, itemsByStatus } = await ReportRepository.getDashboardStatusBreakdowns({
+      start,
+      endExclusive,
+      clientId,
+    });
+
+    let ordersReceived = 0;
+    for (const count of Object.values(ordersByStatus)) {
+      ordersReceived += Number(count) || 0;
+    }
+
+    let itemsTotal = 0;
+    let itemsPending = 0;
+    let itemsProcessed = 0;
+    let itemsDelivered = 0;
+
+    for (const [rawStatus, rawCount] of Object.entries(itemsByStatus)) {
+      const status = rawStatus as OrderStatus;
+      const count = Number(rawCount) || 0;
+      itemsTotal += count;
+
+      if (PENDING_ITEM_ORDER_STATUSES.has(status)) {
+        itemsPending += count;
+      } else if (PROCESSING_ITEM_ORDER_STATUSES.has(status)) {
+        itemsProcessed += count;
+      } else if (DELIVERED_ITEM_ORDER_STATUSES.has(status)) {
+        itemsDelivered += count;
+      }
+    }
+
+    return {
+      ordersReceived,
+      itemsTotal,
+      itemsPending,
+      itemsProcessed,
+      itemsDelivered,
+    };
+  }
+
   static async getDashboardStats() {
     return await ReportRepository.getDashboardStats();
   }

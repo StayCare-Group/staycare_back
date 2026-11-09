@@ -16,6 +16,38 @@ export enum OrderStatus {
 }
 
 /**
+ * Statuses excluded from every report/dashboard count (orders, items, conditions...).
+ * Cancelled orders never represent real laundry volume.
+ */
+export const REPORT_EXCLUDED_ORDER_STATUSES: readonly OrderStatus[] = [OrderStatus.CANCELLED];
+
+/**
+ * Dashboard KPI item status groups.
+ * Together, PENDING + PROCESSING + DELIVERED partition all non-excluded OrderStatus values.
+ */
+export const PENDING_ITEM_ORDER_STATUSES: ReadonlySet<OrderStatus> = new Set([
+  OrderStatus.PENDING,
+  OrderStatus.RESCHEDULED,
+  OrderStatus.ASSIGNED,
+  OrderStatus.TRANSIT,
+  OrderStatus.ARRIVED,
+]);
+
+export const PROCESSING_ITEM_ORDER_STATUSES: ReadonlySet<OrderStatus> = new Set([
+  OrderStatus.WASHING,
+  OrderStatus.DRYING,
+  OrderStatus.IRONING,
+  OrderStatus.QUALITY_CHECK,
+]);
+
+export const DELIVERED_ITEM_ORDER_STATUSES: ReadonlySet<OrderStatus> = new Set([
+  OrderStatus.READY_TO_DELIVERY,
+  OrderStatus.COLLECTED,
+  OrderStatus.DELIVERED,
+  OrderStatus.COMPLETED,
+]);
+
+/**
  * Statuses in which an order can be invoiced.
  * An order is only billable once it has been received in plant (receiveInPlant → ARRIVED),
  * because that is the step where staff confirm the items and the order value is finalized.

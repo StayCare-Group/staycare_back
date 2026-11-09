@@ -1,5 +1,7 @@
 import pool from "../db/pool";
 import type { RowDataPacket } from "mysql2";
+import { toDbOrderStatus, fromDbOrderStatus } from "./order.repository";
+import { OrderStatus, REPORT_EXCLUDED_ORDER_STATUSES } from "../types/orderStatus";
 
 export interface DashboardStats {
   totalOrders: number;
@@ -34,7 +36,74 @@ export interface OrderSlaHistory {
   changed_at: Date;
 }
 
+export interface DashboardOverviewFilters {
+  /** Inclusive start instant (UTC). */
+  start: Date;
+  /** Exclusive end instant (UTC). */
+  endExclusive: Date;
+  clientId?: string | undefined;
+}
+
+export interface DashboardStatusBreakdowns {
+  ordersByStatus: Partial<Record<OrderStatus, number>>;
+  itemsByStatus: Partial<Record<OrderStatus, number>>;
+}
+
 export class ReportRepository {
+  /**
+   * Orders created in `[start, endExclusive)` and the sum of their item quantities,
+   * grouped by `orders.status`. Excluded statuses (cancelled) are left out.
+   * Runs two focused queries in parallel so counting orders never multiplies rows
+   * across `order_items` or requires `COUNT(DISTINCT)`, while returning at most
+   * one row per status so business groupings live in the service layer.
+   */
+  static async getDashboardStatusBreakdowns(
+    filters: DashboardOverviewFilters
+  ): Promise<DashboardStatusBreakdowns> {
+    const excludedStatuses = REPORT_EXCLUDED_ORDER_STATUSES.map(toDbOrderStatus);
+    const params: unknown[] = [filters.start, filters.endExclusive, ...excludedStatuses];
+
+    let where = `o.created_at >= ? AND o.created_at < ?
+        AND o.status NOT IN (${excludedStatuses.map(() => "?").join(", ")})`;
+
+    if (filters.clientId) {
+      where += " AND o.client_id = ?";
+      params.push(filters.clientId);
+    }
+
+    const [[orderRows], [itemRows]] = await Promise.all([
+      pool.query<RowDataPacket[]>(
+        `SELECT o.status AS status, COUNT(*) AS orderCount
+         FROM orders o
+         WHERE ${where}
+         GROUP BY o.status`,
+        params
+      ),
+      pool.query<RowDataPacket[]>(
+        `SELECT o.status AS status, COALESCE(SUM(oi.quantity), 0) AS itemCount
+         FROM orders o
+         INNER JOIN order_items oi ON oi.order_id = o.id
+         WHERE ${where}
+         GROUP BY o.status`,
+        params
+      ),
+    ]);
+
+    const ordersByStatus: Partial<Record<OrderStatus, number>> = {};
+    for (const row of orderRows) {
+      const status = fromDbOrderStatus(String(row.status)) as OrderStatus;
+      ordersByStatus[status] = (ordersByStatus[status] ?? 0) + (Number(row.orderCount) || 0);
+    }
+
+    const itemsByStatus: Partial<Record<OrderStatus, number>> = {};
+    for (const row of itemRows) {
+      const status = fromDbOrderStatus(String(row.status)) as OrderStatus;
+      itemsByStatus[status] = (itemsByStatus[status] ?? 0) + (Number(row.itemCount) || 0);
+    }
+
+    return { ordersByStatus, itemsByStatus };
+  }
+
   static async getDashboardStats(): Promise<DashboardStats> {
     const today = new Date().toISOString().slice(0, 10);
     const monthStart = new Date();
