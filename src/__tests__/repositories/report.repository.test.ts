@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { queryMock } = vi.hoisted(() => ({ queryMock: vi.fn() }));
+const { queryMock, executeMock } = vi.hoisted(() => ({
+  queryMock: vi.fn(),
+  executeMock: vi.fn(),
+}));
 
 vi.mock("../../db/pool", () => ({
-  default: { query: queryMock, execute: vi.fn() },
+  default: { query: queryMock, execute: executeMock },
 }));
 
 import { ReportRepository } from "../../repositories/report.repository";
@@ -94,3 +97,114 @@ describe("ReportRepository.getDashboardStatusBreakdowns", () => {
     expect(result).toEqual({ ordersByStatus: {}, itemsByStatus: {} });
   });
 });
+
+describe("ReportRepository.getDashboardOrdersByHour", () => {
+  beforeEach(() => {
+    queryMock.mockReset();
+  });
+
+  it("groups non-cancelled orders by UTC hour and applies optional clientId filter", async () => {
+    queryMock.mockResolvedValueOnce([
+      [
+        { hourUtc: "2026-10-31 23:00:00", orderCount: "3" },
+        { hourUtc: "2026-11-01 10:00:00", orderCount: 5 },
+      ],
+    ]);
+
+    const rows = await ReportRepository.getDashboardOrdersByHour({
+      start,
+      endExclusive,
+      clientId: "client-99",
+    });
+
+    expect(rows).toEqual([
+      { hourUtc: "2026-10-31 23:00:00", orderCount: 3 },
+      { hourUtc: "2026-11-01 10:00:00", orderCount: 5 },
+    ]);
+
+    const [sql, params] = queryMock.mock.calls[0]!;
+    expect(sql).toContain("DATE_FORMAT(o.created_at, '%Y-%m-%d %H:00:00') AS hourUtc");
+    expect(sql).toContain("GROUP BY hourUtc");
+    expect(sql).toContain("o.client_id = ?");
+    expect(params).toEqual([start, endExclusive, "Cancelled", "client-99"]);
+  });
+});
+
+describe("ReportRepository.getDashboardOverduePickups & getDashboardStalledOrders", () => {
+  const thresholdDate = new Date("2026-11-09T21:00:00.000Z");
+
+  beforeEach(() => {
+    executeMock.mockReset();
+  });
+
+  it("queries overdue pickups in Pending/Assigned/Rescheduled with pickup_window_end < thresholdDate", async () => {
+    executeMock.mockResolvedValueOnce([
+      [
+        {
+          orderId: "ord-1",
+          orderNumber: "ORD-001",
+          clientId: "cli-1",
+          clientName: "Client 1",
+          status: "Pending",
+          referenceDate: "2026-11-09T10:00:00.000Z",
+        },
+      ],
+    ]);
+
+    const rows = await ReportRepository.getDashboardOverduePickups(thresholdDate, "cli-1");
+
+    expect(rows).toEqual([
+      {
+        orderId: "ord-1",
+        orderNumber: "ORD-001",
+        clientId: "cli-1",
+        clientName: "Client 1",
+        status: "Pending",
+        referenceDate: new Date("2026-11-09T10:00:00.000Z"),
+      },
+    ]);
+
+    const [sql, params] = executeMock.mock.calls[0]!;
+    expect(sql).toContain("WHERE o.status IN ('Pending', 'Assigned', 'Rescheduled')");
+    expect(sql).toContain("AND o.pickup_window_end < ?");
+    expect(sql).toContain("AND o.client_id = ?");
+    expect(params).toEqual([thresholdDate, "cli-1"]);
+  });
+
+  it("queries stalled orders in active processing/delivery statuses with updated_at < thresholdDate", async () => {
+    executeMock.mockResolvedValueOnce([
+      [
+        {
+          orderId: "ord-2",
+          orderNumber: "ORD-002",
+          clientId: "cli-2",
+          clientName: null,
+          status: "ReadyToDeliver",
+          referenceDate: "2026-11-09T08:00:00.000Z",
+        },
+      ],
+    ]);
+
+    const rows = await ReportRepository.getDashboardStalledOrders(thresholdDate);
+
+    expect(rows).toEqual([
+      {
+        orderId: "ord-2",
+        orderNumber: "ORD-002",
+        clientId: "cli-2",
+        clientName: "Unknown",
+        status: "ReadyToDeliver",
+        referenceDate: new Date("2026-11-09T08:00:00.000Z"),
+      },
+    ]);
+
+    const [sql, params] = executeMock.mock.calls[0]!;
+    expect(sql).toContain(
+      "WHERE o.status IN ('Transit', 'Arrived', 'Washing', 'Drying', 'Ironing', 'QualityCheck', 'ReadyToDeliver', 'Collected')"
+    );
+    expect(sql).toContain("AND o.updated_at < ?");
+    expect(sql).not.toContain("o.client_id = ?");
+    expect(params).toEqual([thresholdDate]);
+  });
+});
+

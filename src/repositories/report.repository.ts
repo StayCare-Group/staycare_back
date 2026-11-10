@@ -28,6 +28,15 @@ export interface ClientStats {
   totalRevenue: number;
 }
 
+export interface RawDashboardAlertRow {
+  orderId: string;
+  orderNumber: string;
+  clientId: string;
+  clientName: string;
+  status: string;
+  referenceDate: Date;
+}
+
 export interface OrderSlaHistory {
   id: string;
   service_type: string;
@@ -49,6 +58,30 @@ export interface DashboardStatusBreakdowns {
   itemsByStatus: Partial<Record<OrderStatus, number>>;
 }
 
+export interface DashboardHourlyOrderCount {
+  /** UTC hour bucket formatted as `YYYY-MM-DD HH:00:00`. */
+  hourUtc: string;
+  orderCount: number;
+}
+
+function buildDashboardOrdersFilter(filters: DashboardOverviewFilters): {
+  where: string;
+  params: unknown[];
+} {
+  const excludedStatuses = REPORT_EXCLUDED_ORDER_STATUSES.map(toDbOrderStatus);
+  const params: unknown[] = [filters.start, filters.endExclusive, ...excludedStatuses];
+
+  let where = `o.created_at >= ? AND o.created_at < ?
+        AND o.status NOT IN (${excludedStatuses.map(() => "?").join(", ")})`;
+
+  if (filters.clientId) {
+    where += " AND o.client_id = ?";
+    params.push(filters.clientId);
+  }
+
+  return { where, params };
+}
+
 export class ReportRepository {
   /**
    * Orders created in `[start, endExclusive)` and the sum of their item quantities,
@@ -60,16 +93,7 @@ export class ReportRepository {
   static async getDashboardStatusBreakdowns(
     filters: DashboardOverviewFilters
   ): Promise<DashboardStatusBreakdowns> {
-    const excludedStatuses = REPORT_EXCLUDED_ORDER_STATUSES.map(toDbOrderStatus);
-    const params: unknown[] = [filters.start, filters.endExclusive, ...excludedStatuses];
-
-    let where = `o.created_at >= ? AND o.created_at < ?
-        AND o.status NOT IN (${excludedStatuses.map(() => "?").join(", ")})`;
-
-    if (filters.clientId) {
-      where += " AND o.client_id = ?";
-      params.push(filters.clientId);
-    }
+    const { where, params } = buildDashboardOrdersFilter(filters);
 
     const [[orderRows], [itemRows]] = await Promise.all([
       pool.query<RowDataPacket[]>(
@@ -102,6 +126,30 @@ export class ReportRepository {
     }
 
     return { ordersByStatus, itemsByStatus };
+  }
+
+  /**
+   * Counts non-cancelled orders in `[start, endExclusive)` grouped by UTC hour.
+   * The service layer maps each UTC hour into its `Europe/Malta` calendar day or month.
+   */
+  static async getDashboardOrdersByHour(
+    filters: DashboardOverviewFilters
+  ): Promise<DashboardHourlyOrderCount[]> {
+    const { where, params } = buildDashboardOrdersFilter(filters);
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT DATE_FORMAT(o.created_at, '%Y-%m-%d %H:00:00') AS hourUtc, COUNT(*) AS orderCount
+       FROM orders o
+       WHERE ${where}
+       GROUP BY hourUtc
+       ORDER BY hourUtc ASC`,
+      params
+    );
+
+    return rows.map((row) => ({
+      hourUtc: String(row.hourUtc),
+      orderCount: Number(row.orderCount) || 0,
+    }));
   }
 
   static async getDashboardStats(): Promise<DashboardStats> {
@@ -220,6 +268,76 @@ export class ReportRepository {
       created_at: new Date(r.created_at),
       status: r.status,
       changed_at: new Date(r.changed_at),
+    }));
+  }
+
+  static async getDashboardOverduePickups(
+    thresholdDate: Date,
+    clientId?: string
+  ): Promise<RawDashboardAlertRow[]> {
+    let query = `
+      SELECT
+        o.id AS orderId,
+        o.order_number AS orderNumber,
+        o.client_id AS clientId,
+        u.name AS clientName,
+        o.status,
+        o.pickup_window_end AS referenceDate
+      FROM orders o
+      JOIN users u ON o.client_id = u.id
+      WHERE o.status IN ('Pending', 'Assigned', 'Rescheduled')
+        AND o.pickup_window_end < ?
+    `;
+    const params: any[] = [thresholdDate];
+    if (clientId) {
+      query += ` AND o.client_id = ?`;
+      params.push(clientId);
+    }
+    query += ` ORDER BY o.pickup_window_end ASC`;
+
+    const [rows] = await pool.execute<RowDataPacket[]>(query, params);
+    return rows.map((r) => ({
+      orderId: String(r.orderId),
+      orderNumber: String(r.orderNumber),
+      clientId: String(r.clientId),
+      clientName: String(r.clientName || "Unknown"),
+      status: String(r.status),
+      referenceDate: new Date(r.referenceDate),
+    }));
+  }
+
+  static async getDashboardStalledOrders(
+    thresholdDate: Date,
+    clientId?: string
+  ): Promise<RawDashboardAlertRow[]> {
+    let query = `
+      SELECT
+        o.id AS orderId,
+        o.order_number AS orderNumber,
+        o.client_id AS clientId,
+        u.name AS clientName,
+        o.status,
+        o.updated_at AS referenceDate
+      FROM orders o
+      JOIN users u ON o.client_id = u.id
+      WHERE o.status IN ('Transit', 'Arrived', 'Washing', 'Drying', 'Ironing', 'QualityCheck', 'ReadyToDeliver', 'Collected')
+        AND o.updated_at < ?
+    `;
+    const params: any[] = [thresholdDate];
+    if (clientId) {
+      query += ` AND o.client_id = ?`;
+      params.push(clientId);
+    }
+    query += ` ORDER BY o.updated_at ASC`;
+
+    const [rows] = await pool.execute<RowDataPacket[]>(query, params);
+    return rows.map((r) => ({
+      orderId: String(r.orderId),
+      orderNumber: String(r.orderNumber),
+      clientId: String(r.clientId),
+      clientName: String(r.clientName || "Unknown"),
+      status: String(r.status),
+      referenceDate: new Date(r.referenceDate),
     }));
   }
 }

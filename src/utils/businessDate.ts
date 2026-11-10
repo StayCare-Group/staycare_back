@@ -128,3 +128,63 @@ export function getBusinessDateRangeUtc(from: string, to: string): UtcDateRange 
   };
 }
 
+/**
+ * Formats a UTC instant (Date or "YYYY-MM-DD HH:mm:ss" UTC string) into its
+ * `YYYY-MM-DD` calendar date in `BUSINESS_TIMEZONE` (Europe/Malta).
+ */
+export function formatBusinessDate(utcInstant: Date | string): string {
+  const date =
+    typeof utcInstant === "string"
+      ? new Date(utcInstant.trim().replace(" ", "T") + (utcInstant.endsWith("Z") ? "" : "Z"))
+      : utcInstant;
+
+  const parts = businessClock.formatToParts(date);
+  const read = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return `${read("year")}-${read("month")}-${read("day")}`;
+}
+
+/**
+ * Lists every calendar day (`YYYY-MM-DD`) in `[from, to]` inclusive.
+ */
+export function listBusinessCalendarDays(from: string, to: string): string[] {
+  const start = requireCalendarDate(from);
+  const end = requireCalendarDate(to);
+  const startMs = Date.UTC(start.year, start.month - 1, start.day);
+  const endMs = Date.UTC(end.year, end.month - 1, end.day);
+
+  const days: string[] = [];
+  for (let ms = startMs; ms <= endMs; ms += MS_PER_DAY) {
+    const d = new Date(ms);
+    const y = String(d.getUTCFullYear()).padStart(4, "0");
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    days.push(`${y}-${m}-${day}`);
+  }
+  return days;
+}
+
+/**
+ * Lists every calendar month (`YYYY-MM`) touched by `[from, to]` inclusive.
+ */
+export function listBusinessCalendarMonths(from: string, to: string): string[] {
+  const start = requireCalendarDate(from);
+  const end = requireCalendarDate(to);
+
+  const months: string[] = [];
+  let year = start.year;
+  let month = start.month;
+
+  while (year < end.year || (year === end.year && month <= end.month)) {
+    months.push(`${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}`);
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+  return months;
+}
+
+

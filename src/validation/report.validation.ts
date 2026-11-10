@@ -40,3 +40,14 @@ export const dashboardFiltersQuerySchema = z
 
 export type DashboardFiltersQuery = z.infer<typeof dashboardFiltersQuerySchema>;
 
+/**
+ * Query schema for real-time dashboard alerts.
+ * Date range is not applicable because alerts represent current open orders.
+ * `clientId` is optional to allow scoping alerts to a selected client.
+ */
+export const dashboardAlertsQuerySchema = z.object({
+  clientId: uuidIdSchema.optional(),
+});
+
+export type DashboardAlertsQuery = z.infer<typeof dashboardAlertsQuerySchema>;
+

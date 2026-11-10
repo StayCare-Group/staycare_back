@@ -2,8 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   BUSINESS_TIMEZONE,
   countCalendarDaysInclusive,
+  formatBusinessDate,
   getBusinessDateRangeUtc,
   isValidCalendarDate,
+  listBusinessCalendarDays,
+  listBusinessCalendarMonths,
 } from "../../utils/businessDate";
 
 /**
@@ -84,6 +87,38 @@ describe("businessDate", () => {
       expect(countCalendarDaysInclusive("2026-11-01", "2026-11-30")).toBe(30);
       expect(countCalendarDaysInclusive("2026-03-28", "2026-03-30")).toBe(3);
       expect(countCalendarDaysInclusive("2026-11-02", "2026-11-01")).toBe(0);
+    });
+  });
+
+  describe("formatBusinessDate", () => {
+    it("maps UTC hour strings around Malta midnight in winter (UTC+1) and summer (UTC+2)", () => {
+      // Winter (UTC+1): 22:00 UTC is still 23:00 in Malta, 23:00 UTC is 00:00 next day in Malta
+      expect(formatBusinessDate("2026-11-01 22:00:00")).toBe("2026-11-01");
+      expect(formatBusinessDate("2026-11-01 23:00:00")).toBe("2026-11-02");
+
+      // Summer (UTC+2): 21:00 UTC is 23:00 in Malta, 22:00 UTC is 00:00 next day in Malta
+      expect(formatBusinessDate("2026-07-15 21:00:00")).toBe("2026-07-15");
+      expect(formatBusinessDate("2026-07-15 22:00:00")).toBe("2026-07-16");
+    });
+  });
+
+  describe("listBusinessCalendarDays & listBusinessCalendarMonths", () => {
+    it("lists inclusive calendar days across month boundaries", () => {
+      expect(listBusinessCalendarDays("2026-01-30", "2026-02-02")).toEqual([
+        "2026-01-30",
+        "2026-01-31",
+        "2026-02-01",
+        "2026-02-02",
+      ]);
+    });
+
+    it("lists inclusive calendar months across year boundaries", () => {
+      expect(listBusinessCalendarMonths("2025-11-15", "2026-02-10")).toEqual([
+        "2025-11",
+        "2025-12",
+        "2026-01",
+        "2026-02",
+      ]);
     });
   });
 });

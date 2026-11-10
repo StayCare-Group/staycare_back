@@ -2,6 +2,8 @@ import { Router } from "express";
 import {
   getDashboardStats,
   getDashboardOverview,
+  getDashboardDailyOrders,
+  getDashboardAlerts,
   getRevenueByMonth,
   getOrdersByClient,
   getSlaMetrics,
@@ -16,6 +18,8 @@ router.use(authorize("admin"));
 
 router.get("/dashboard", getDashboardStats);
 router.get("/dashboard/overview", getDashboardOverview);
+router.get("/dashboard/daily-orders", getDashboardDailyOrders);
+router.get("/dashboard/alerts", getDashboardAlerts);
 router.get("/revenue", getRevenueByMonth);
 router.get("/orders-by-client", getOrdersByClient);
 router.get("/sla", getSlaMetrics);

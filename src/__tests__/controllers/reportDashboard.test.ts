@@ -1,15 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Request, Response } from "express";
 
-const { getStatusBreakdownsRepoMock } = vi.hoisted(() => ({
+const {
+  getStatusBreakdownsRepoMock,
+  getOrdersByHourRepoMock,
+  getOverduePickupsRepoMock,
+  getStalledOrdersRepoMock,
+} = vi.hoisted(() => ({
   getStatusBreakdownsRepoMock: vi.fn(),
+  getOrdersByHourRepoMock: vi.fn(),
+  getOverduePickupsRepoMock: vi.fn(),
+  getStalledOrdersRepoMock: vi.fn(),
 }));
 
 vi.mock("../../repositories/report.repository", () => ({
-  ReportRepository: { getDashboardStatusBreakdowns: getStatusBreakdownsRepoMock },
+  ReportRepository: {
+    getDashboardStatusBreakdowns: getStatusBreakdownsRepoMock,
+    getDashboardOrdersByHour: getOrdersByHourRepoMock,
+    getDashboardOverduePickups: getOverduePickupsRepoMock,
+    getDashboardStalledOrders: getStalledOrdersRepoMock,
+  },
 }));
 
-import { getDashboardOverview } from "../../controllers/report.controller";
+import {
+  getDashboardOverview,
+  getDashboardDailyOrders,
+  getDashboardAlerts,
+} from "../../controllers/report.controller";
 import { OrderStatus } from "../../types/orderStatus";
 
 function mockResponse() {
@@ -95,7 +112,7 @@ describe("getDashboardOverview controller & service", () => {
   });
 
   it("returns 500 when the repository fails", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => { });
     getStatusBreakdownsRepoMock.mockRejectedValue(new Error("db down"));
     const req = { query: { from: "2026-11-01", to: "2026-11-01" } } as unknown as Request;
     const res = mockResponse();
@@ -103,5 +120,175 @@ describe("getDashboardOverview controller & service", () => {
     await getDashboardOverview(req, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
+  });
+});
+
+describe("getDashboardDailyOrders controller & service", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getOrdersByHourRepoMock.mockReset();
+  });
+
+  it("returns day granularity for ranges <= 31 days, buckets UTC hours into Malta days and fills missing days with 0", async () => {
+    // 2026-10-31 23:00 UTC is 2026-11-01 00:00 in Malta (CET, UTC+1)
+    // 2026-11-01 22:00 UTC is 2026-11-01 23:00 in Malta
+    // 2026-11-01 23:00 UTC is 2026-11-02 00:00 in Malta
+    getOrdersByHourRepoMock.mockResolvedValue([
+      { hourUtc: "2026-10-31 23:00:00", orderCount: 2 },
+      { hourUtc: "2026-11-01 22:00:00", orderCount: 4 },
+      { hourUtc: "2026-11-01 23:00:00", orderCount: 5 },
+    ]);
+
+    const req = { query: { from: "2026-11-01", to: "2026-11-03" } } as unknown as Request;
+    const res = mockResponse();
+
+    await getDashboardDailyOrders(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.body).toMatchObject({
+      success: true,
+      data: {
+        granularity: "day",
+        points: [
+          { date: "2026-11-01", orders: 6 },
+          { date: "2026-11-02", orders: 5 },
+          { date: "2026-11-03", orders: 0 },
+        ],
+      },
+    });
+  });
+
+  it("switches to month granularity for ranges > 31 days (e.g. 32 days or full year)", async () => {
+    getOrdersByHourRepoMock.mockResolvedValue([
+      { hourUtc: "2026-01-15 10:00:00", orderCount: 10 },
+      { hourUtc: "2026-03-20 12:00:00", orderCount: 7 },
+    ]);
+
+    const req = { query: { from: "2026-01-01", to: "2026-03-31" } } as unknown as Request;
+    const res = mockResponse();
+
+    await getDashboardDailyOrders(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.body.data).toEqual({
+      granularity: "month",
+      points: [
+        { date: "2026-01", orders: 10 },
+        { date: "2026-02", orders: 0 },
+        { date: "2026-03", orders: 7 },
+      ],
+    });
+  });
+
+  it("returns 400 when filters are invalid", async () => {
+    const req = { query: { from: "2026-11-10", to: "2026-11-01" } } as unknown as Request;
+    const res = mockResponse();
+
+    await getDashboardDailyOrders(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(getOrdersByHourRepoMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("getDashboardAlerts controller & service", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getOverduePickupsRepoMock.mockReset();
+    getStalledOrdersRepoMock.mockReset();
+  });
+
+  it("returns 400 when clientId is not a valid UUID", async () => {
+    const req = { query: { clientId: "invalid-id" } } as unknown as Request;
+    const res = mockResponse();
+
+    await getDashboardAlerts(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.body.success).toBe(false);
+    expect(getOverduePickupsRepoMock).not.toHaveBeenCalled();
+  });
+
+  it("returns overdue pickups and stalled orders with calculated delayed hours", async () => {
+    const now = new Date("2026-11-10T21:00:00Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const pickupDate = new Date("2026-11-09T15:00:00Z"); // 30 hours ago
+    const stalledDate = new Date("2026-11-09T19:00:00Z"); // 26 hours ago
+
+    getOverduePickupsRepoMock.mockResolvedValue([
+      {
+        orderId: "ord-1",
+        orderNumber: "ORD-001",
+        clientId: "client-1",
+        clientName: "Client A",
+        status: "Pending",
+        referenceDate: pickupDate,
+      },
+    ]);
+
+    getStalledOrdersRepoMock.mockResolvedValue([
+      {
+        orderId: "ord-2",
+        orderNumber: "ORD-002",
+        clientId: "client-2",
+        clientName: "Client B",
+        status: "ReadyToDeliver",
+        referenceDate: stalledDate,
+      },
+    ]);
+
+    const req = { query: {} } as unknown as Request;
+    const res = mockResponse();
+
+    await getDashboardAlerts(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.thresholdHours).toBe(24);
+    expect(res.body.data.totalAlerts).toBe(2);
+
+    expect(res.body.data.overduePickups).toEqual([
+      {
+        orderId: "ord-1",
+        orderNumber: "ORD-001",
+        clientId: "client-1",
+        clientName: "Client A",
+        status: OrderStatus.PENDING,
+        hoursDelayed: 30,
+        referenceDate: pickupDate.toISOString(),
+      },
+    ]);
+
+    expect(res.body.data.stalledOrders).toEqual([
+      {
+        orderId: "ord-2",
+        orderNumber: "ORD-002",
+        clientId: "client-2",
+        clientName: "Client B",
+        status: OrderStatus.READY_TO_DELIVERY,
+        hoursDelayed: 26,
+        referenceDate: stalledDate.toISOString(),
+      },
+    ]);
+
+    vi.useRealTimers();
+  });
+
+  it("passes clientId to both repository calls when provided", async () => {
+    const clientId = "11111111-1111-4111-8111-111111111111";
+    getOverduePickupsRepoMock.mockResolvedValue([]);
+    getStalledOrdersRepoMock.mockResolvedValue([]);
+
+    const req = { query: { clientId } } as unknown as Request;
+    const res = mockResponse();
+
+    await getDashboardAlerts(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(getOverduePickupsRepoMock).toHaveBeenCalledWith(expect.any(Date), clientId);
+    expect(getStalledOrdersRepoMock).toHaveBeenCalledWith(expect.any(Date), clientId);
+    expect(res.body.data.totalAlerts).toBe(0);
   });
 });

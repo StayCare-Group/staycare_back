@@ -1,5 +1,16 @@
-import { ReportRepository, type OrderSlaHistory } from "../repositories/report.repository";
-import { getBusinessDateRangeUtc } from "../utils/businessDate";
+import {
+  ReportRepository,
+  type OrderSlaHistory,
+  type RawDashboardAlertRow,
+} from "../repositories/report.repository";
+import { fromDbOrderStatus } from "../repositories/order.repository";
+import {
+  getBusinessDateRangeUtc,
+  countCalendarDaysInclusive,
+  formatBusinessDate,
+  listBusinessCalendarDays,
+  listBusinessCalendarMonths,
+} from "../utils/businessDate";
 import {
   OrderStatus,
   PENDING_ITEM_ORDER_STATUSES,
@@ -23,7 +34,78 @@ export interface DashboardOverview {
   itemsDelivered: number;
 }
 
+export type DashboardSeriesGranularity = "day" | "month";
+
+export interface DashboardOrdersPoint {
+  /** `YYYY-MM-DD` when granularity is `day`, or `YYYY-MM` when granularity is `month`. */
+  date: string;
+  orders: number;
+}
+
+export interface DashboardOrdersSeries {
+  granularity: DashboardSeriesGranularity;
+  points: DashboardOrdersPoint[];
+}
+
+const MAX_DAILY_GRANULARITY_DAYS = 31;
+
+export const ALERT_THRESHOLD_HOURS = 24;
+
+export interface DashboardAlertItem {
+  orderId: string;
+  orderNumber: string;
+  clientId: string;
+  clientName: string;
+  status: OrderStatus;
+  hoursDelayed: number;
+  referenceDate: string;
+}
+
+export interface DashboardAlerts {
+  thresholdHours: number;
+  totalAlerts: number;
+  overduePickups: DashboardAlertItem[];
+  stalledOrders: DashboardAlertItem[];
+}
+
 export class ReportService {
+  static async getDashboardAlerts(
+    { clientId }: { clientId?: string | undefined } = {},
+    now: Date = new Date()
+  ): Promise<DashboardAlerts> {
+    const thresholdMs = ALERT_THRESHOLD_HOURS * 3600 * 1000;
+    const thresholdDate = new Date(now.getTime() - thresholdMs);
+
+    const [rawPickups, rawStalled] = await Promise.all([
+      ReportRepository.getDashboardOverduePickups(thresholdDate, clientId),
+      ReportRepository.getDashboardStalledOrders(thresholdDate, clientId),
+    ]);
+
+    const mapItem = (row: RawDashboardAlertRow): DashboardAlertItem => {
+      const refTime = row.referenceDate.getTime();
+      const hoursDelayed = Math.max(0, Math.floor((now.getTime() - refTime) / 3600000));
+      return {
+        orderId: row.orderId,
+        orderNumber: row.orderNumber,
+        clientId: row.clientId,
+        clientName: row.clientName,
+        status: fromDbOrderStatus(row.status) as OrderStatus,
+        hoursDelayed,
+        referenceDate: row.referenceDate.toISOString(),
+      };
+    };
+
+    const overduePickups = rawPickups.map(mapItem);
+    const stalledOrders = rawStalled.map(mapItem);
+
+    return {
+      thresholdHours: ALERT_THRESHOLD_HOURS,
+      totalAlerts: overduePickups.length + stalledOrders.length,
+      overduePickups,
+      stalledOrders,
+    };
+  }
+
   static async getDashboardOverview({ from, to, clientId }: DashboardOverviewQuery): Promise<DashboardOverview> {
     const { start, endExclusive } = getBusinessDateRangeUtc(from, to);
     const { ordersByStatus, itemsByStatus } = await ReportRepository.getDashboardStatusBreakdowns({
@@ -65,6 +147,46 @@ export class ReportService {
     };
   }
 
+  static async getDashboardDailyOrders({
+    from,
+    to,
+    clientId,
+  }: DashboardOverviewQuery): Promise<DashboardOrdersSeries> {
+    const daysCount = countCalendarDaysInclusive(from, to);
+    const granularity: DashboardSeriesGranularity =
+      daysCount <= MAX_DAILY_GRANULARITY_DAYS ? "day" : "month";
+
+    const { start, endExclusive } = getBusinessDateRangeUtc(from, to);
+    const hourlyRows = await ReportRepository.getDashboardOrdersByHour({
+      start,
+      endExclusive,
+      clientId,
+    });
+
+    const bucketKeys =
+      granularity === "day"
+        ? listBusinessCalendarDays(from, to)
+        : listBusinessCalendarMonths(from, to);
+
+    const bucketMap = new Map<string, number>();
+    for (const key of bucketKeys) {
+      bucketMap.set(key, 0);
+    }
+
+    for (const row of hourlyRows) {
+      const maltaDate = formatBusinessDate(row.hourUtc);
+      const bucketKey = granularity === "day" ? maltaDate : maltaDate.slice(0, 7);
+      if (bucketMap.has(bucketKey)) {
+        bucketMap.set(bucketKey, (bucketMap.get(bucketKey) ?? 0) + (Number(row.orderCount) || 0));
+      }
+    }
+
+    return {
+      granularity,
+      points: Array.from(bucketMap.entries(), ([date, orders]) => ({ date, orders })),
+    };
+  }
+
   static async getDashboardStats() {
     return await ReportRepository.getDashboardStats();
   }
@@ -101,7 +223,7 @@ export class ReportService {
 
     for (const [id, order] of grouped) {
       const history = order.history;
-      
+
       const findTs = (statuses: string[]) => {
         const lowerStatuses = statuses.map((s) => s.toLowerCase());
         const entry = history.find((h) => lowerStatuses.includes(h.status.toLowerCase()));

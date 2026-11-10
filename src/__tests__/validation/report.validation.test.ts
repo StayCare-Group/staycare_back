@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   dashboardFiltersQuerySchema,
+  dashboardAlertsQuerySchema,
   MAX_DASHBOARD_RANGE_DAYS,
 } from "../../validation/report.validation";
 
@@ -59,6 +60,25 @@ describe("dashboardFiltersQuerySchema", () => {
       from: ["2026-11-01", "2026-11-02"],
       to: "2026-11-30",
     });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("dashboardAlertsQuerySchema", () => {
+  it("accepts an empty query (all clients)", () => {
+    const result = dashboardAlertsQuerySchema.safeParse({});
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({});
+  });
+
+  it("accepts a valid UUID clientId", () => {
+    const result = dashboardAlertsQuerySchema.safeParse({ clientId: CLIENT_ID });
+    expect(result.success).toBe(true);
+    expect(result.data?.clientId).toBe(CLIENT_ID);
+  });
+
+  it("rejects an invalid clientId", () => {
+    const result = dashboardAlertsQuerySchema.safeParse({ clientId: "not-a-valid-uuid" });
     expect(result.success).toBe(false);
   });
 });

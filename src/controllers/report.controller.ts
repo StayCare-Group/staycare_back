@@ -1,7 +1,10 @@
 import { Request, Response } from "express";
 import { ReportService } from "../services/report.service";
 import { sendSuccess, sendError } from "../utils/response";
-import { dashboardFiltersQuerySchema } from "../validation/report.validation";
+import {
+  dashboardFiltersQuerySchema,
+  dashboardAlertsQuerySchema,
+} from "../validation/report.validation";
 
 /**
  * @swagger
@@ -78,6 +81,92 @@ export const getDashboardOverview = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("getDashboardOverview error:", error);
     return sendError(res, 500, "Failed to fetch dashboard overview");
+  }
+};
+
+/**
+ * @swagger
+ * /api/reports/dashboard/daily-orders:
+ *   get:
+ *     summary: Serie de órdenes del dashboard admin (por día hasta 31 días, o por mes para rangos mayores)
+ *     description: |
+ *       Devuelve la serie temporal de órdenes creadas en el rango `[from, to]` (hora de Malta),
+ *       excluyendo canceladas y rellenando días/meses sin órdenes con `0`.
+ *     tags: [Reports]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         required: true
+ *         schema: { type: string, format: date, example: "2026-11-01" }
+ *       - in: query
+ *         name: to
+ *         required: true
+ *         schema: { type: string, format: date, example: "2026-11-30" }
+ *       - in: query
+ *         name: clientId
+ *         required: false
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: "{ granularity: 'day' | 'month', points: [{ date, orders }] }"
+ *       400:
+ *         description: Filtros inválidos
+ *       403:
+ *         description: Solo admin
+ */
+export const getDashboardDailyOrders = async (req: Request, res: Response) => {
+  const filters = dashboardFiltersQuerySchema.safeParse(req.query);
+  if (!filters.success) {
+    return sendError(res, 400, "Validation failed. Invalid dashboard filters.", filters.error.issues);
+  }
+
+  try {
+    const series = await ReportService.getDashboardDailyOrders(filters.data);
+    return sendSuccess(res, 200, "Dashboard daily orders", series);
+  } catch (error) {
+    console.error("getDashboardDailyOrders error:", error);
+    return sendError(res, 500, "Failed to fetch dashboard daily orders");
+  }
+};
+
+/**
+ * @swagger
+ * /api/reports/dashboard/alerts:
+ *   get:
+ *     summary: Alertas operativas en tiempo real (recogidas vencidas y órdenes estancadas)
+ *     description: |
+ *       Devuelve las órdenes con recogida pendiente vencida (> 24h) y órdenes activas sin avance (> 24h).
+ *       Opcionalmente filtrado por clientId.
+ *     tags: [Reports]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: clientId
+ *         required: false
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: "{ thresholdHours: 24, totalAlerts: n, overduePickups: [...], stalledOrders: [...] }"
+ *       400:
+ *         description: Filtros inválidos
+ *       403:
+ *         description: Solo admin
+ */
+export const getDashboardAlerts = async (req: Request, res: Response) => {
+  const query = dashboardAlertsQuerySchema.safeParse(req.query);
+  if (!query.success) {
+    return sendError(res, 400, "Validation failed. Invalid alerts query.", query.error.issues);
+  }
+
+  try {
+    const alerts = await ReportService.getDashboardAlerts(query.data);
+    return sendSuccess(res, 200, "Dashboard alerts", alerts);
+  } catch (error) {
+    console.error("getDashboardAlerts error:", error);
+    return sendError(res, 500, "Failed to fetch dashboard alerts");
   }
 };
 
