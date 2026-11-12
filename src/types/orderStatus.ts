@@ -48,6 +48,22 @@ export const DELIVERED_ITEM_ORDER_STATUSES: ReadonlySet<OrderStatus> = new Set([
 ]);
 
 /**
+ * Dashboard operational order count groups (Step B3):
+ * - ORDERS_TO_PICKUP_STATUSES: orders waiting to be picked up from the client.
+ * - ORDERS_TO_DELIVER_STATUSES: orders ready in plant or out for delivery to the client.
+ */
+export const ORDERS_TO_PICKUP_STATUSES: ReadonlySet<OrderStatus> = new Set([
+  OrderStatus.PENDING,
+  OrderStatus.ASSIGNED,
+  OrderStatus.RESCHEDULED,
+]);
+
+export const ORDERS_TO_DELIVER_STATUSES: ReadonlySet<OrderStatus> = new Set([
+  OrderStatus.READY_TO_DELIVERY,
+  OrderStatus.COLLECTED,
+]);
+
+/**
  * Statuses in which an order can be invoiced.
  * An order is only billable once it has been received in plant (receiveInPlant → ARRIVED),
  * because that is the step where staff confirm the items and the order value is finalized.

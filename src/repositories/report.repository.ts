@@ -53,9 +53,16 @@ export interface DashboardOverviewFilters {
   clientId?: string | undefined;
 }
 
+export interface DashboardConditionCounts {
+  good: number;
+  bad: number;
+  stained: number;
+}
+
 export interface DashboardStatusBreakdowns {
   ordersByStatus: Partial<Record<OrderStatus, number>>;
   itemsByStatus: Partial<Record<OrderStatus, number>>;
+  conditionsByStatus?: Partial<Record<OrderStatus, DashboardConditionCounts>>;
 }
 
 export interface DashboardHourlyOrderCount {
@@ -104,7 +111,11 @@ export class ReportRepository {
         params
       ),
       pool.query<RowDataPacket[]>(
-        `SELECT o.status AS status, COALESCE(SUM(oi.quantity), 0) AS itemCount
+        `SELECT o.status AS status,
+                COALESCE(SUM(oi.quantity), 0) AS itemCount,
+                COALESCE(SUM(oi.qty_good), 0) AS qtyGood,
+                COALESCE(SUM(oi.qty_bad), 0) AS qtyBad,
+                COALESCE(SUM(oi.qty_stained), 0) AS qtyStained
          FROM orders o
          INNER JOIN order_items oi ON oi.order_id = o.id
          WHERE ${where}
@@ -120,12 +131,19 @@ export class ReportRepository {
     }
 
     const itemsByStatus: Partial<Record<OrderStatus, number>> = {};
+    const conditionsByStatus: Partial<Record<OrderStatus, DashboardConditionCounts>> = {};
     for (const row of itemRows) {
       const status = fromDbOrderStatus(String(row.status)) as OrderStatus;
       itemsByStatus[status] = (itemsByStatus[status] ?? 0) + (Number(row.itemCount) || 0);
+      const prev = conditionsByStatus[status] ?? { good: 0, bad: 0, stained: 0 };
+      conditionsByStatus[status] = {
+        good: prev.good + (Number(row.qtyGood) || 0),
+        bad: prev.bad + (Number(row.qtyBad) || 0),
+        stained: prev.stained + (Number(row.qtyStained) || 0),
+      };
     }
 
-    return { ordersByStatus, itemsByStatus };
+    return { ordersByStatus, itemsByStatus, conditionsByStatus };
   }
 
   /**

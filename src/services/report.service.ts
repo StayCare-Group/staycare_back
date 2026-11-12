@@ -16,6 +16,9 @@ import {
   PENDING_ITEM_ORDER_STATUSES,
   PROCESSING_ITEM_ORDER_STATUSES,
   DELIVERED_ITEM_ORDER_STATUSES,
+  ORDERS_TO_PICKUP_STATUSES,
+  ORDERS_TO_DELIVER_STATUSES,
+  INVOICEABLE_ORDER_STATUSES,
 } from "../types/orderStatus";
 
 export interface DashboardOverviewQuery {
@@ -26,12 +29,30 @@ export interface DashboardOverviewQuery {
   clientId?: string | undefined;
 }
 
+export interface DashboardItemsInProcess {
+  washing: number;
+  drying: number;
+  ironing: number;
+  qualityCheck: number;
+}
+
+export interface DashboardItemConditions {
+  good: number;
+  bad: number;
+  stained: number;
+  total: number;
+}
+
 export interface DashboardOverview {
   ordersReceived: number;
   itemsTotal: number;
   itemsPending: number;
   itemsProcessed: number;
   itemsDelivered: number;
+  ordersToPickup: number;
+  ordersToDeliver: number;
+  itemsInProcess: DashboardItemsInProcess;
+  itemConditions: DashboardItemConditions;
 }
 
 export type DashboardSeriesGranularity = "day" | "month";
@@ -108,15 +129,30 @@ export class ReportService {
 
   static async getDashboardOverview({ from, to, clientId }: DashboardOverviewQuery): Promise<DashboardOverview> {
     const { start, endExclusive } = getBusinessDateRangeUtc(from, to);
-    const { ordersByStatus, itemsByStatus } = await ReportRepository.getDashboardStatusBreakdowns({
+    const {
+      ordersByStatus,
+      itemsByStatus,
+      conditionsByStatus = {},
+    } = await ReportRepository.getDashboardStatusBreakdowns({
       start,
       endExclusive,
       clientId,
     });
 
     let ordersReceived = 0;
-    for (const count of Object.values(ordersByStatus)) {
-      ordersReceived += Number(count) || 0;
+    let ordersToPickup = 0;
+    let ordersToDeliver = 0;
+
+    for (const [rawStatus, rawCount] of Object.entries(ordersByStatus)) {
+      const status = rawStatus as OrderStatus;
+      const count = Number(rawCount) || 0;
+      ordersReceived += count;
+
+      if (ORDERS_TO_PICKUP_STATUSES.has(status)) {
+        ordersToPickup += count;
+      } else if (ORDERS_TO_DELIVER_STATUSES.has(status)) {
+        ordersToDeliver += count;
+      }
     }
 
     let itemsTotal = 0;
@@ -138,12 +174,43 @@ export class ReportService {
       }
     }
 
+    const itemsInProcess: DashboardItemsInProcess = {
+      washing: Number(itemsByStatus[OrderStatus.WASHING]) || 0,
+      drying: Number(itemsByStatus[OrderStatus.DRYING]) || 0,
+      ironing: Number(itemsByStatus[OrderStatus.IRONING]) || 0,
+      qualityCheck: Number(itemsByStatus[OrderStatus.QUALITY_CHECK]) || 0,
+    };
+
+    let good = 0;
+    let bad = 0;
+    let stained = 0;
+
+    for (const [rawStatus, cond] of Object.entries(conditionsByStatus)) {
+      const status = rawStatus as OrderStatus;
+      if (INVOICEABLE_ORDER_STATUSES.has(status) && cond) {
+        good += Number(cond.good) || 0;
+        bad += Number(cond.bad) || 0;
+        stained += Number(cond.stained) || 0;
+      }
+    }
+
+    const itemConditions: DashboardItemConditions = {
+      good,
+      bad,
+      stained,
+      total: good + bad + stained,
+    };
+
     return {
       ordersReceived,
       itemsTotal,
       itemsPending,
       itemsProcessed,
       itemsDelivered,
+      ordersToPickup,
+      ordersToDeliver,
+      itemsInProcess,
+      itemConditions,
     };
   }
 

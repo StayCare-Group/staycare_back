@@ -31,9 +31,9 @@ describe("ReportRepository.getDashboardStatusBreakdowns", () => {
       ])
       .mockResolvedValueOnce([
         [
-          { status: "Pending", itemCount: "80" },
-          { status: "Washing", itemCount: "60" },
-          { status: "ReadyToDeliver", itemCount: "100" },
+          { status: "Pending", itemCount: "80", qtyGood: "80", qtyBad: "0", qtyStained: "0" },
+          { status: "Washing", itemCount: "60", qtyGood: "55", qtyBad: "2", qtyStained: "3" },
+          { status: "ReadyToDeliver", itemCount: "100", qtyGood: "95", qtyBad: "1", qtyStained: "4" },
         ],
       ]);
 
@@ -50,6 +50,11 @@ describe("ReportRepository.getDashboardStatusBreakdowns", () => {
         [OrderStatus.WASHING]: 60,
         [OrderStatus.READY_TO_DELIVERY]: 100,
       },
+      conditionsByStatus: {
+        [OrderStatus.PENDING]: { good: 80, bad: 0, stained: 0 },
+        [OrderStatus.WASHING]: { good: 55, bad: 2, stained: 3 },
+        [OrderStatus.READY_TO_DELIVERY]: { good: 95, bad: 1, stained: 4 },
+      },
     });
     expect(queryMock).toHaveBeenCalledTimes(2);
 
@@ -65,7 +70,10 @@ describe("ReportRepository.getDashboardStatusBreakdowns", () => {
     expect(ordersParams).toEqual([start, endExclusive, "Cancelled"]);
 
     const [itemsSql, itemsParams] = queryMock.mock.calls[1]!;
-    expect(itemsSql).toContain("SELECT o.status AS status, COALESCE(SUM(oi.quantity), 0) AS itemCount");
+    expect(itemsSql).toContain("COALESCE(SUM(oi.quantity), 0) AS itemCount");
+    expect(itemsSql).toContain("COALESCE(SUM(oi.qty_good), 0) AS qtyGood");
+    expect(itemsSql).toContain("COALESCE(SUM(oi.qty_bad), 0) AS qtyBad");
+    expect(itemsSql).toContain("COALESCE(SUM(oi.qty_stained), 0) AS qtyStained");
     expect(itemsSql).toContain("INNER JOIN order_items oi ON oi.order_id = o.id");
     expect(itemsSql).toContain("GROUP BY o.status");
     expect(itemsParams).toEqual([start, endExclusive, "Cancelled"]);
@@ -74,7 +82,7 @@ describe("ReportRepository.getDashboardStatusBreakdowns", () => {
   it("adds the client filter when clientId is provided", async () => {
     queryMock
       .mockResolvedValueOnce([[{ status: "Delivered", orderCount: 3 }]])
-      .mockResolvedValueOnce([[{ status: "Delivered", itemCount: 40 }]]);
+      .mockResolvedValueOnce([[{ status: "Delivered", itemCount: 40, qtyGood: 38, qtyBad: 1, qtyStained: 1 }]]);
 
     await ReportRepository.getDashboardStatusBreakdowns({
       start,
@@ -94,7 +102,7 @@ describe("ReportRepository.getDashboardStatusBreakdowns", () => {
 
     const result = await ReportRepository.getDashboardStatusBreakdowns({ start, endExclusive });
 
-    expect(result).toEqual({ ordersByStatus: {}, itemsByStatus: {} });
+    expect(result).toEqual({ ordersByStatus: {}, itemsByStatus: {}, conditionsByStatus: {} });
   });
 });
 

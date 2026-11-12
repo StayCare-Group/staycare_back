@@ -56,7 +56,7 @@ describe("getDashboardOverview controller & service", () => {
     expect(getStatusBreakdownsRepoMock).not.toHaveBeenCalled();
   });
 
-  it("converts the Malta range to UTC and aggregates itemsPending, itemsProcessed and itemsDelivered", async () => {
+  it("converts the Malta range to UTC and aggregates KPIs, itemsInProcess, ordersToPickup/Deliver and itemConditions", async () => {
     getStatusBreakdownsRepoMock.mockResolvedValue({
       ordersByStatus: {
         [OrderStatus.PENDING]: 2,
@@ -74,6 +74,14 @@ describe("getDashboardOverview controller & service", () => {
         [OrderStatus.READY_TO_DELIVERY]: 25,
         [OrderStatus.DELIVERED]: 65,
       },
+      conditionsByStatus: {
+        [OrderStatus.PENDING]: { good: 30, bad: 0, stained: 0 }, // Excluded (< arrived)
+        [OrderStatus.ARRIVED]: { good: 18, bad: 1, stained: 1 },
+        [OrderStatus.WASHING]: { good: 40, bad: 2, stained: 3 },
+        [OrderStatus.IRONING]: { good: 14, bad: 0, stained: 1 },
+        [OrderStatus.READY_TO_DELIVERY]: { good: 24, bad: 1, stained: 0 },
+        [OrderStatus.DELIVERED]: { good: 60, bad: 2, stained: 3 },
+      },
     });
     const req = { query: { from: "2026-11-01", to: "2026-11-07" } } as unknown as Request;
     const res = mockResponse();
@@ -89,6 +97,20 @@ describe("getDashboardOverview controller & service", () => {
         itemsPending: 50,
         itemsProcessed: 60,
         itemsDelivered: 90,
+        ordersToPickup: 2,
+        ordersToDeliver: 2,
+        itemsInProcess: {
+          washing: 45,
+          drying: 0,
+          ironing: 15,
+          qualityCheck: 0,
+        },
+        itemConditions: {
+          good: 156,
+          bad: 6,
+          stained: 8,
+          total: 170,
+        },
       },
     });
 
