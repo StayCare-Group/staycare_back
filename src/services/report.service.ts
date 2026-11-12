@@ -10,6 +10,7 @@ import {
   formatBusinessDate,
   listBusinessCalendarDays,
   listBusinessCalendarMonths,
+  getMonthCalendarRange,
 } from "../utils/businessDate";
 import {
   OrderStatus,
@@ -87,6 +88,20 @@ export interface DashboardAlerts {
   totalAlerts: number;
   overduePickups: DashboardAlertItem[];
   stalledOrders: DashboardAlertItem[];
+}
+
+export interface DashboardMonthlyComparisonRow {
+  key: "totalItems" | "totalOrders" | "totalStained" | "totalInvoiced";
+  monthA: number;
+  monthB: number;
+  difference: number;
+  variationPercent: number | null;
+}
+
+export interface DashboardMonthlyComparison {
+  monthA: string;
+  monthB: string;
+  rows: DashboardMonthlyComparisonRow[];
 }
 
 export class ReportService {
@@ -251,6 +266,94 @@ export class ReportService {
     return {
       granularity,
       points: Array.from(bucketMap.entries(), ([date, orders]) => ({ date, orders })),
+    };
+  }
+
+  private static async getMonthMetrics(
+    from: string,
+    to: string,
+    clientId?: string | undefined
+  ): Promise<{ totalOrders: number; totalItems: number; totalStained: number; totalInvoiced: number }> {
+    const { start, endExclusive } = getBusinessDateRangeUtc(from, to);
+    const [breakdown, totalInvoiced] = await Promise.all([
+      ReportRepository.getDashboardStatusBreakdowns({ start, endExclusive, clientId }),
+      ReportRepository.getDashboardInvoicedTotal(from, to, clientId),
+    ]);
+
+    let totalOrders = 0;
+    for (const count of Object.values(breakdown.ordersByStatus)) {
+      totalOrders += Number(count) || 0;
+    }
+
+    let totalItems = 0;
+    for (const count of Object.values(breakdown.itemsByStatus)) {
+      totalItems += Number(count) || 0;
+    }
+
+    let totalStained = 0;
+    for (const [rawStatus, cond] of Object.entries(breakdown.conditionsByStatus ?? {})) {
+      if (INVOICEABLE_ORDER_STATUSES.has(rawStatus as OrderStatus) && cond) {
+        totalStained += Number(cond.stained) || 0;
+      }
+    }
+
+    return { totalOrders, totalItems, totalStained, totalInvoiced };
+  }
+
+  static async getDashboardComparison({
+    monthA,
+    monthB,
+    clientId,
+  }: {
+    monthA: string;
+    monthB: string;
+    clientId?: string | undefined;
+  }): Promise<DashboardMonthlyComparison> {
+    const rangeA = getMonthCalendarRange(monthA);
+    const rangeB = getMonthCalendarRange(monthB);
+
+    const [metricsA, metricsB] = await Promise.all([
+      ReportService.getMonthMetrics(rangeA.from, rangeA.to, clientId),
+      ReportService.getMonthMetrics(rangeB.from, rangeB.to, clientId),
+    ]);
+
+    const buildRow = (
+      key: DashboardMonthlyComparisonRow["key"],
+      valA: number,
+      valB: number,
+      isCurrency: boolean = false
+    ): DashboardMonthlyComparisonRow => {
+      const roundedA = isCurrency ? Math.round(valA * 100) / 100 : Math.round(valA);
+      const roundedB = isCurrency ? Math.round(valB * 100) / 100 : Math.round(valB);
+      const difference = isCurrency
+        ? Math.round((roundedB - roundedA) * 100) / 100
+        : roundedB - roundedA;
+
+      let variationPercent: number | null = null;
+      if (roundedA > 0) {
+        variationPercent = Math.round(((roundedB - roundedA) / roundedA) * 1000) / 10;
+      } else if (roundedA < 0) {
+        variationPercent = Math.round(((roundedB - roundedA) / Math.abs(roundedA)) * 1000) / 10;
+      }
+
+      return {
+        key,
+        monthA: roundedA,
+        monthB: roundedB,
+        difference,
+        variationPercent,
+      };
+    };
+
+    return {
+      monthA,
+      monthB,
+      rows: [
+        buildRow("totalItems", metricsA.totalItems, metricsB.totalItems),
+        buildRow("totalOrders", metricsA.totalOrders, metricsB.totalOrders),
+        buildRow("totalStained", metricsA.totalStained, metricsB.totalStained),
+        buildRow("totalInvoiced", metricsA.totalInvoiced, metricsB.totalInvoiced, true),
+      ],
     };
   }
 

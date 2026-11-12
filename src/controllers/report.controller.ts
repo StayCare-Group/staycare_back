@@ -4,6 +4,7 @@ import { sendSuccess, sendError } from "../utils/response";
 import {
   dashboardFiltersQuerySchema,
   dashboardAlertsQuerySchema,
+  dashboardComparisonQuerySchema,
 } from "../validation/report.validation";
 
 /**
@@ -167,6 +168,53 @@ export const getDashboardAlerts = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("getDashboardAlerts error:", error);
     return sendError(res, 500, "Failed to fetch dashboard alerts");
+  }
+};
+
+/**
+ * @swagger
+ * /api/reports/dashboard/comparison:
+ *   get:
+ *     summary: Comparativo de métricas entre dos meses (Total Ítems, Órdenes, Manchas y Facturación)
+ *     description: |
+ *       Calcula y compara Total Items, Total Órdenes, Total Manchas y Total Facturación (invoices emitidas)
+ *       entre monthA y monthB. Opcionalmente filtrado por clientId.
+ *     tags: [Reports]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: monthA
+ *         required: true
+ *         schema: { type: string, example: "2026-10" }
+ *       - in: query
+ *         name: monthB
+ *         required: true
+ *         schema: { type: string, example: "2026-11" }
+ *       - in: query
+ *         name: clientId
+ *         required: false
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: "{ monthA, monthB, rows: [{ key, monthA, monthB, difference, variationPercent }] }"
+ *       400:
+ *         description: Filtros inválidos
+ *       403:
+ *         description: Solo admin
+ */
+export const getDashboardComparison = async (req: Request, res: Response) => {
+  const query = dashboardComparisonQuerySchema.safeParse(req.query);
+  if (!query.success) {
+    return sendError(res, 400, "Validation failed. Invalid comparison query.", query.error.issues);
+  }
+
+  try {
+    const comparison = await ReportService.getDashboardComparison(query.data);
+    return sendSuccess(res, 200, "Dashboard comparison", comparison);
+  } catch (error) {
+    console.error("getDashboardComparison error:", error);
+    return sendError(res, 500, "Failed to fetch dashboard comparison");
   }
 };
 

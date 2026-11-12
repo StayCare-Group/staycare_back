@@ -6,11 +6,13 @@ const {
   getOrdersByHourRepoMock,
   getOverduePickupsRepoMock,
   getStalledOrdersRepoMock,
+  getInvoicedTotalRepoMock,
 } = vi.hoisted(() => ({
   getStatusBreakdownsRepoMock: vi.fn(),
   getOrdersByHourRepoMock: vi.fn(),
   getOverduePickupsRepoMock: vi.fn(),
   getStalledOrdersRepoMock: vi.fn(),
+  getInvoicedTotalRepoMock: vi.fn(),
 }));
 
 vi.mock("../../repositories/report.repository", () => ({
@@ -19,6 +21,7 @@ vi.mock("../../repositories/report.repository", () => ({
     getDashboardOrdersByHour: getOrdersByHourRepoMock,
     getDashboardOverduePickups: getOverduePickupsRepoMock,
     getDashboardStalledOrders: getStalledOrdersRepoMock,
+    getDashboardInvoicedTotal: getInvoicedTotalRepoMock,
   },
 }));
 
@@ -26,6 +29,7 @@ import {
   getDashboardOverview,
   getDashboardDailyOrders,
   getDashboardAlerts,
+  getDashboardComparison,
 } from "../../controllers/report.controller";
 import { OrderStatus } from "../../types/orderStatus";
 
@@ -314,3 +318,149 @@ describe("getDashboardAlerts controller & service", () => {
     expect(res.body.data.totalAlerts).toBe(0);
   });
 });
+
+describe("getDashboardComparison controller & service", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getStatusBreakdownsRepoMock.mockReset();
+    getInvoicedTotalRepoMock.mockReset();
+  });
+
+  it("returns 400 when monthA or monthB have invalid format", async () => {
+    const req = { query: { monthA: "2026-13", monthB: "2026-11" } } as unknown as Request;
+    const res = mockResponse();
+
+    await getDashboardComparison(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.body.success).toBe(false);
+    expect(getStatusBreakdownsRepoMock).not.toHaveBeenCalled();
+  });
+
+  it("calculates comparison metrics, differences and percentage variations between monthA and monthB", async () => {
+    // Month A (Oct 2026)
+    getStatusBreakdownsRepoMock.mockResolvedValueOnce({
+      ordersByStatus: {
+        [OrderStatus.DELIVERED]: 40,
+      },
+      itemsByStatus: {
+        [OrderStatus.DELIVERED]: 800,
+      },
+      conditionsByStatus: {
+        [OrderStatus.DELIVERED]: { good: 780, bad: 10, stained: 10 },
+      },
+    });
+    getInvoicedTotalRepoMock.mockResolvedValueOnce(5000);
+
+    // Month B (Nov 2026)
+    getStatusBreakdownsRepoMock.mockResolvedValueOnce({
+      ordersByStatus: {
+        [OrderStatus.DELIVERED]: 50,
+      },
+      itemsByStatus: {
+        [OrderStatus.DELIVERED]: 1000,
+      },
+      conditionsByStatus: {
+        [OrderStatus.DELIVERED]: { good: 975, bad: 10, stained: 15 },
+      },
+    });
+    getInvoicedTotalRepoMock.mockResolvedValueOnce(6500.5);
+
+    const req = { query: { monthA: "2026-10", monthB: "2026-11" } } as unknown as Request;
+    const res = mockResponse();
+
+    await getDashboardComparison(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toEqual({
+      monthA: "2026-10",
+      monthB: "2026-11",
+      rows: [
+        {
+          key: "totalItems",
+          monthA: 800,
+          monthB: 1000,
+          difference: 200,
+          variationPercent: 25,
+        },
+        {
+          key: "totalOrders",
+          monthA: 40,
+          monthB: 50,
+          difference: 10,
+          variationPercent: 25,
+        },
+        {
+          key: "totalStained",
+          monthA: 10,
+          monthB: 15,
+          difference: 5,
+          variationPercent: 50,
+        },
+        {
+          key: "totalInvoiced",
+          monthA: 5000,
+          monthB: 6500.5,
+          difference: 1500.5,
+          variationPercent: 30,
+        },
+      ],
+    });
+  });
+
+  it("handles base month with 0 values by returning null for variationPercent", async () => {
+    // Month A with 0
+    getStatusBreakdownsRepoMock.mockResolvedValueOnce({
+      ordersByStatus: {},
+      itemsByStatus: {},
+      conditionsByStatus: {},
+    });
+    getInvoicedTotalRepoMock.mockResolvedValueOnce(0);
+
+    // Month B with some values
+    getStatusBreakdownsRepoMock.mockResolvedValueOnce({
+      ordersByStatus: { [OrderStatus.DELIVERED]: 10 },
+      itemsByStatus: { [OrderStatus.DELIVERED]: 150 },
+      conditionsByStatus: { [OrderStatus.DELIVERED]: { good: 145, bad: 0, stained: 5 } },
+    });
+    getInvoicedTotalRepoMock.mockResolvedValueOnce(1200);
+
+    const req = { query: { monthA: "2026-09", monthB: "2026-10" } } as unknown as Request;
+    const res = mockResponse();
+
+    await getDashboardComparison(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    const rows = res.body.data.rows;
+    expect(rows.find((r: any) => r.key === "totalOrders")?.variationPercent).toBeNull();
+    expect(rows.find((r: any) => r.key === "totalOrders")?.difference).toBe(10);
+    expect(rows.find((r: any) => r.key === "totalInvoiced")?.variationPercent).toBeNull();
+  });
+
+  it("forwards clientId when provided", async () => {
+    const clientId = "22222222-2222-4222-8222-222222222222";
+    getStatusBreakdownsRepoMock.mockResolvedValue({
+      ordersByStatus: {},
+      itemsByStatus: {},
+      conditionsByStatus: {},
+    });
+    getInvoicedTotalRepoMock.mockResolvedValue(0);
+
+    const req = { query: { monthA: "2026-10", monthB: "2026-11", clientId } } as unknown as Request;
+    const res = mockResponse();
+
+    await getDashboardComparison(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(getStatusBreakdownsRepoMock).toHaveBeenCalledWith(
+      expect.objectContaining({ clientId })
+    );
+    expect(getInvoicedTotalRepoMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      clientId
+    );
+  });
+});
+

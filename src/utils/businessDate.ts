@@ -187,4 +187,22 @@ export function listBusinessCalendarMonths(from: string, to: string): string[] {
   return months;
 }
 
+/**
+ * Returns the first and last calendar days (`YYYY-MM-DD`) of a `YYYY-MM` month.
+ */
+export function getMonthCalendarRange(yearMonth: string): { from: string; to: string } {
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(yearMonth.trim());
+  if (!match) {
+    throw new AppError(`Invalid month "${yearMonth}". Expected YYYY-MM.`, 400);
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const ym = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}`;
+  return {
+    from: `${ym}-01`,
+    to: `${ym}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
 

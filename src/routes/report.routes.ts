@@ -4,6 +4,7 @@ import {
   getDashboardOverview,
   getDashboardDailyOrders,
   getDashboardAlerts,
+  getDashboardComparison,
   getRevenueByMonth,
   getOrdersByClient,
   getSlaMetrics,
@@ -20,6 +21,7 @@ router.get("/dashboard", getDashboardStats);
 router.get("/dashboard/overview", getDashboardOverview);
 router.get("/dashboard/daily-orders", getDashboardDailyOrders);
 router.get("/dashboard/alerts", getDashboardAlerts);
+router.get("/dashboard/comparison", getDashboardComparison);
 router.get("/revenue", getRevenueByMonth);
 router.get("/orders-by-client", getOrdersByClient);
 router.get("/sla", getSlaMetrics);

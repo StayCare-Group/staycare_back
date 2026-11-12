@@ -51,3 +51,17 @@ export const dashboardAlertsQuerySchema = z.object({
 
 export type DashboardAlertsQuery = z.infer<typeof dashboardAlertsQuerySchema>;
 
+const yearMonthPattern = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/**
+ * Query schema for monthly comparison on the admin dashboard.
+ * `monthA` and `monthB` are YYYY-MM strings.
+ */
+export const dashboardComparisonQuerySchema = z.object({
+  monthA: z.string().regex(yearMonthPattern, "Invalid monthA format. Expected YYYY-MM"),
+  monthB: z.string().regex(yearMonthPattern, "Invalid monthB format. Expected YYYY-MM"),
+  clientId: uuidIdSchema.optional(),
+});
+
+export type DashboardComparisonQuery = z.infer<typeof dashboardComparisonQuerySchema>;
+

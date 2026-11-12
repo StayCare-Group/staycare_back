@@ -358,4 +358,28 @@ export class ReportRepository {
       referenceDate: new Date(r.referenceDate),
     }));
   }
+
+  /**
+   * Sums the `total` of all invoices issued within `[from, to]` inclusive.
+   * `from` and `to` are `YYYY-MM-DD` strings matching `invoices.issue_date`.
+   */
+  static async getDashboardInvoicedTotal(
+    from: string,
+    to: string,
+    clientId?: string
+  ): Promise<number> {
+    let query = `
+      SELECT COALESCE(SUM(total), 0) AS totalInvoiced
+      FROM invoices
+      WHERE issue_date >= ? AND issue_date <= ?
+    `;
+    const params: unknown[] = [from, to];
+    if (clientId) {
+      query += ` AND client_id = ?`;
+      params.push(clientId);
+    }
+
+    const [rows] = await pool.query<RowDataPacket[]>(query, params);
+    return Number(rows[0]?.totalInvoiced) || 0;
+  }
 }
