@@ -31,9 +31,9 @@ describe("ReportRepository.getDashboardStatusBreakdowns", () => {
       ])
       .mockResolvedValueOnce([
         [
-          { status: "Pending", itemCount: "80", qtyGood: "80", qtyBad: "0", qtyStained: "0" },
-          { status: "Washing", itemCount: "60", qtyGood: "55", qtyBad: "2", qtyStained: "3" },
-          { status: "ReadyToDeliver", itemCount: "100", qtyGood: "95", qtyBad: "1", qtyStained: "4" },
+          { status: "Pending", itemCount: "80", qtyGood: "80", qtyBad: "0", qtyStained: "0", ironedItemCount: "50" },
+          { status: "Washing", itemCount: "60", qtyGood: "55", qtyBad: "2", qtyStained: "3", ironedItemCount: "40" },
+          { status: "ReadyToDeliver", itemCount: "100", qtyGood: "95", qtyBad: "1", qtyStained: "4", ironedItemCount: "70" },
         ],
       ]);
 
@@ -54,6 +54,11 @@ describe("ReportRepository.getDashboardStatusBreakdowns", () => {
         [OrderStatus.PENDING]: { good: 80, bad: 0, stained: 0 },
         [OrderStatus.WASHING]: { good: 55, bad: 2, stained: 3 },
         [OrderStatus.READY_TO_DELIVERY]: { good: 95, bad: 1, stained: 4 },
+      },
+      ironedItemsByStatus: {
+        [OrderStatus.PENDING]: 50,
+        [OrderStatus.WASHING]: 40,
+        [OrderStatus.READY_TO_DELIVERY]: 70,
       },
     });
     expect(queryMock).toHaveBeenCalledTimes(2);
@@ -102,7 +107,12 @@ describe("ReportRepository.getDashboardStatusBreakdowns", () => {
 
     const result = await ReportRepository.getDashboardStatusBreakdowns({ start, endExclusive });
 
-    expect(result).toEqual({ ordersByStatus: {}, itemsByStatus: {}, conditionsByStatus: {} });
+    expect(result).toEqual({
+      ordersByStatus: {},
+      itemsByStatus: {},
+      conditionsByStatus: {},
+      ironedItemsByStatus: {},
+    });
   });
 });
 
@@ -155,6 +165,7 @@ describe("ReportRepository.getDashboardOverduePickups & getDashboardStalledOrder
           clientName: "Client 1",
           status: "Pending",
           referenceDate: "2026-11-09T10:00:00.000Z",
+          specialNotes: "Urgent pickup",
         },
       ],
     ]);
@@ -169,6 +180,7 @@ describe("ReportRepository.getDashboardOverduePickups & getDashboardStalledOrder
         clientName: "Client 1",
         status: "Pending",
         referenceDate: new Date("2026-11-09T10:00:00.000Z"),
+        specialNotes: "Urgent pickup",
       },
     ]);
 
@@ -203,6 +215,7 @@ describe("ReportRepository.getDashboardOverduePickups & getDashboardStalledOrder
         clientName: "Unknown",
         status: "ReadyToDeliver",
         referenceDate: new Date("2026-11-09T08:00:00.000Z"),
+        specialNotes: null,
       },
     ]);
 

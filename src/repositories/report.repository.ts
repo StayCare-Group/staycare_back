@@ -35,6 +35,7 @@ export interface RawDashboardAlertRow {
   clientName: string;
   status: string;
   referenceDate: Date;
+  specialNotes: string | null;
 }
 
 export interface OrderSlaHistory {
@@ -63,7 +64,20 @@ export interface DashboardStatusBreakdowns {
   ordersByStatus: Partial<Record<OrderStatus, number>>;
   itemsByStatus: Partial<Record<OrderStatus, number>>;
   conditionsByStatus?: Partial<Record<OrderStatus, DashboardConditionCounts>>;
+  ironedItemsByStatus?: Partial<Record<OrderStatus, number>>;
 }
+
+const IRONED_ITEM_CONDITION_SQL = `(
+  LOWER(oi.name_snapshot) LIKE '%sheet%'
+  OR LOWER(oi.name_snapshot) LIKE '%sábana%'
+  OR LOWER(oi.name_snapshot) LIKE '%sabana%'
+  OR LOWER(oi.name_snapshot) LIKE '%pillow case%'
+  OR LOWER(oi.name_snapshot) LIKE '%pillowcase%'
+  OR LOWER(oi.name_snapshot) LIKE '%funda%'
+  OR LOWER(oi.name_snapshot) LIKE '%cover%'
+  OR LOWER(oi.name_snapshot) LIKE '%napkin%'
+  OR LOWER(oi.name_snapshot) LIKE '%servilleta%'
+)`;
 
 export interface DashboardHourlyOrderCount {
   /** UTC hour bucket formatted as `YYYY-MM-DD HH:00:00`. */
@@ -115,7 +129,8 @@ export class ReportRepository {
                 COALESCE(SUM(oi.quantity), 0) AS itemCount,
                 COALESCE(SUM(oi.qty_good), 0) AS qtyGood,
                 COALESCE(SUM(oi.qty_bad), 0) AS qtyBad,
-                COALESCE(SUM(oi.qty_stained), 0) AS qtyStained
+                COALESCE(SUM(oi.qty_stained), 0) AS qtyStained,
+                COALESCE(SUM(CASE WHEN ${IRONED_ITEM_CONDITION_SQL} THEN oi.quantity ELSE 0 END), 0) AS ironedItemCount
          FROM orders o
          INNER JOIN order_items oi ON oi.order_id = o.id
          WHERE ${where}
@@ -132,9 +147,12 @@ export class ReportRepository {
 
     const itemsByStatus: Partial<Record<OrderStatus, number>> = {};
     const conditionsByStatus: Partial<Record<OrderStatus, DashboardConditionCounts>> = {};
+    const ironedItemsByStatus: Partial<Record<OrderStatus, number>> = {};
     for (const row of itemRows) {
       const status = fromDbOrderStatus(String(row.status)) as OrderStatus;
       itemsByStatus[status] = (itemsByStatus[status] ?? 0) + (Number(row.itemCount) || 0);
+      ironedItemsByStatus[status] =
+        (ironedItemsByStatus[status] ?? 0) + (Number(row.ironedItemCount) || 0);
       const prev = conditionsByStatus[status] ?? { good: 0, bad: 0, stained: 0 };
       conditionsByStatus[status] = {
         good: prev.good + (Number(row.qtyGood) || 0),
@@ -143,7 +161,7 @@ export class ReportRepository {
       };
     }
 
-    return { ordersByStatus, itemsByStatus, conditionsByStatus };
+    return { ordersByStatus, itemsByStatus, conditionsByStatus, ironedItemsByStatus };
   }
 
   /**
@@ -300,7 +318,8 @@ export class ReportRepository {
         o.client_id AS clientId,
         u.name AS clientName,
         o.status,
-        o.pickup_window_end AS referenceDate
+        o.pickup_window_end AS referenceDate,
+        o.special_notes AS specialNotes
       FROM orders o
       JOIN users u ON o.client_id = u.id
       WHERE o.status IN ('Pending', 'Assigned', 'Rescheduled')
@@ -321,6 +340,7 @@ export class ReportRepository {
       clientName: String(r.clientName || "Unknown"),
       status: String(r.status),
       referenceDate: new Date(r.referenceDate),
+      specialNotes: r.specialNotes ? String(r.specialNotes) : null,
     }));
   }
 
@@ -335,7 +355,8 @@ export class ReportRepository {
         o.client_id AS clientId,
         u.name AS clientName,
         o.status,
-        o.updated_at AS referenceDate
+        o.updated_at AS referenceDate,
+        o.special_notes AS specialNotes
       FROM orders o
       JOIN users u ON o.client_id = u.id
       WHERE o.status IN ('Transit', 'Arrived', 'Washing', 'Drying', 'Ironing', 'QualityCheck', 'ReadyToDeliver', 'Collected')
@@ -356,6 +377,7 @@ export class ReportRepository {
       clientName: String(r.clientName || "Unknown"),
       status: String(r.status),
       referenceDate: new Date(r.referenceDate),
+      specialNotes: r.specialNotes ? String(r.specialNotes) : null,
     }));
   }
 

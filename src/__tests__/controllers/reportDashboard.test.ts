@@ -251,6 +251,7 @@ describe("getDashboardAlerts controller & service", () => {
         clientName: "Client A",
         status: "Pending",
         referenceDate: pickupDate,
+        specialNotes: "Ring bell twice",
       },
     ]);
 
@@ -262,6 +263,7 @@ describe("getDashboardAlerts controller & service", () => {
         clientName: "Client B",
         status: "ReadyToDeliver",
         referenceDate: stalledDate,
+        specialNotes: null,
       },
     ]);
 
@@ -284,6 +286,7 @@ describe("getDashboardAlerts controller & service", () => {
         status: OrderStatus.PENDING,
         hoursDelayed: 30,
         referenceDate: pickupDate.toISOString(),
+        specialNotes: "Ring bell twice",
       },
     ]);
 
@@ -296,6 +299,7 @@ describe("getDashboardAlerts controller & service", () => {
         status: OrderStatus.READY_TO_DELIVERY,
         hoursDelayed: 26,
         referenceDate: stalledDate.toISOString(),
+        specialNotes: null,
       },
     ]);
 
@@ -349,6 +353,9 @@ describe("getDashboardComparison controller & service", () => {
       conditionsByStatus: {
         [OrderStatus.DELIVERED]: { good: 780, bad: 10, stained: 10 },
       },
+      ironedItemsByStatus: {
+        [OrderStatus.DELIVERED]: 500,
+      },
     });
     getInvoicedTotalRepoMock.mockResolvedValueOnce(5000);
 
@@ -362,6 +369,9 @@ describe("getDashboardComparison controller & service", () => {
       },
       conditionsByStatus: {
         [OrderStatus.DELIVERED]: { good: 975, bad: 10, stained: 15 },
+      },
+      ironedItemsByStatus: {
+        [OrderStatus.DELIVERED]: 650,
       },
     });
     getInvoicedTotalRepoMock.mockResolvedValueOnce(6500.5);
@@ -397,6 +407,13 @@ describe("getDashboardComparison controller & service", () => {
           monthB: 15,
           difference: 5,
           variationPercent: 50,
+        },
+        {
+          key: "totalIroned",
+          monthA: 500,
+          monthB: 650,
+          difference: 150,
+          variationPercent: 30,
         },
         {
           key: "totalInvoiced",

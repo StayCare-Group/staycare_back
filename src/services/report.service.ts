@@ -81,6 +81,7 @@ export interface DashboardAlertItem {
   status: OrderStatus;
   hoursDelayed: number;
   referenceDate: string;
+  specialNotes?: string | null;
 }
 
 export interface DashboardAlerts {
@@ -91,7 +92,7 @@ export interface DashboardAlerts {
 }
 
 export interface DashboardMonthlyComparisonRow {
-  key: "totalItems" | "totalOrders" | "totalStained" | "totalInvoiced";
+  key: "totalItems" | "totalOrders" | "totalStained" | "totalIroned" | "totalInvoiced";
   monthA: number;
   monthB: number;
   difference: number;
@@ -128,6 +129,7 @@ export class ReportService {
         status: fromDbOrderStatus(row.status) as OrderStatus,
         hoursDelayed,
         referenceDate: row.referenceDate.toISOString(),
+        specialNotes: row.specialNotes ?? null,
       };
     };
 
@@ -273,7 +275,13 @@ export class ReportService {
     from: string,
     to: string,
     clientId?: string | undefined
-  ): Promise<{ totalOrders: number; totalItems: number; totalStained: number; totalInvoiced: number }> {
+  ): Promise<{
+    totalOrders: number;
+    totalItems: number;
+    totalStained: number;
+    totalIroned: number;
+    totalInvoiced: number;
+  }> {
     const { start, endExclusive } = getBusinessDateRangeUtc(from, to);
     const [breakdown, totalInvoiced] = await Promise.all([
       ReportRepository.getDashboardStatusBreakdowns({ start, endExclusive, clientId }),
@@ -297,7 +305,12 @@ export class ReportService {
       }
     }
 
-    return { totalOrders, totalItems, totalStained, totalInvoiced };
+    let totalIroned = 0;
+    for (const count of Object.values(breakdown.ironedItemsByStatus ?? {})) {
+      totalIroned += Number(count) || 0;
+    }
+
+    return { totalOrders, totalItems, totalStained, totalIroned, totalInvoiced };
   }
 
   static async getDashboardComparison({
@@ -352,6 +365,7 @@ export class ReportService {
         buildRow("totalItems", metricsA.totalItems, metricsB.totalItems),
         buildRow("totalOrders", metricsA.totalOrders, metricsB.totalOrders),
         buildRow("totalStained", metricsA.totalStained, metricsB.totalStained),
+        buildRow("totalIroned", metricsA.totalIroned, metricsB.totalIroned),
         buildRow("totalInvoiced", metricsA.totalInvoiced, metricsB.totalInvoiced, true),
       ],
     };
