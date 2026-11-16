@@ -277,6 +277,8 @@ CREATE TABLE `items` (
   `id` CHAR(36) NOT NULL,
   `item_code` VARCHAR(20) NOT NULL,
   `name` VARCHAR(200) NOT NULL,
+  `category` ENUM('sheets', 'covers', 'towels', 'mats_and_cloths', 'others') NOT NULL DEFAULT 'others',
+  `requires_ironing` TINYINT(1) NOT NULL DEFAULT '0',
   `base_price` DECIMAL(10,2) NOT NULL DEFAULT '0.00',
   `is_active` TINYINT(1) NOT NULL DEFAULT '1',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -229,3 +229,67 @@ describe("ReportRepository.getDashboardOverduePickups & getDashboardStalledOrder
   });
 });
 
+describe("ReportRepository.getDashboardGarmentBreakdowns", () => {
+  beforeEach(() => {
+    queryMock.mockReset();
+  });
+
+  it("groups by category from items table (defaulting to others) and maps rows", async () => {
+    queryMock.mockResolvedValueOnce([
+      [
+        { garmentCategory: "sheets", status: "Washing", itemCount: "16" },
+        { garmentCategory: "towels", status: "Delivered", itemCount: 24 },
+        { garmentCategory: "others", status: "Pending", itemCount: 5 },
+      ],
+    ]);
+
+    const rows = await ReportRepository.getDashboardGarmentBreakdowns({ start, endExclusive });
+
+    expect(rows).toEqual([
+      { category: "sheets", status: OrderStatus.WASHING, itemCount: 16 },
+      { category: "towels", status: OrderStatus.DELIVERED, itemCount: 24 },
+      { category: "others", status: OrderStatus.PENDING, itemCount: 5 },
+    ]);
+
+    const [sql] = queryMock.mock.calls[0]!;
+    expect(sql).toContain("COALESCE(i.category, 'others') AS garmentCategory");
+    expect(sql).toContain("GROUP BY garmentCategory, o.status");
+  });
+});
+
+describe("ReportRepository.getLiveProcessBreakdowns", () => {
+  beforeEach(() => {
+    queryMock.mockReset();
+  });
+
+  it("filters only by status (no date range) and maps rows", async () => {
+    queryMock.mockResolvedValueOnce([
+      [{ garmentCategory: "sheets", status: "Washing", itemCount: "12" }],
+    ]);
+
+    const rows = await ReportRepository.getLiveProcessBreakdowns([
+      OrderStatus.WASHING,
+      OrderStatus.DRYING,
+    ]);
+
+    expect(rows).toEqual([{ category: "sheets", status: OrderStatus.WASHING, itemCount: 12 }]);
+    const [sql, params] = queryMock.mock.calls[0]!;
+    expect(sql).toContain("o.status IN (?, ?)");
+    expect(sql).toContain("WHEN o.status = 'Ironing' AND COALESCE(i.requires_ironing, 0) = 0 THEN 0");
+    expect(sql).not.toContain("o.created_at");
+    expect(sql).not.toContain("o.client_id");
+    expect(params).toEqual(["Washing", "Drying"]);
+  });
+
+  it("adds the client filter when clientId is provided", async () => {
+    queryMock.mockResolvedValueOnce([[]]);
+
+    await ReportRepository.getLiveProcessBreakdowns([OrderStatus.IRONING], "client-1");
+
+    const [sql, params] = queryMock.mock.calls[0]!;
+    expect(sql).toContain("o.client_id = ?");
+    expect(params).toEqual(["Ironing", "client-1"]);
+  });
+});
+
+

@@ -220,6 +220,50 @@ export const getDashboardComparison = async (req: Request, res: Response) => {
 
 /**
  * @swagger
+ * /api/reports/dashboard/garments:
+ *   get:
+ *     summary: Top prendas y resumen del proceso por categoría (lavado, secado, plancha)
+ *     tags: [Reports]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         required: true
+ *         schema: { type: string, format: date, example: "2026-11-01" }
+ *       - in: query
+ *         name: to
+ *         required: true
+ *         schema: { type: string, format: date, example: "2026-11-30" }
+ *       - in: query
+ *         name: clientId
+ *         required: false
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: "{ totalItems, topGarments, processSummary }"
+ *       400:
+ *         description: Filtros inválidos
+ *       403:
+ *         description: Solo admin
+ */
+export const getDashboardGarments = async (req: Request, res: Response) => {
+  const filters = dashboardFiltersQuerySchema.safeParse(req.query);
+  if (!filters.success) {
+    return sendError(res, 400, "Validation failed. Invalid dashboard filters.", filters.error.issues);
+  }
+
+  try {
+    const garments = await ReportService.getDashboardGarments(filters.data);
+    return sendSuccess(res, 200, "Dashboard garments summary", garments);
+  } catch (error) {
+    console.error("getDashboardGarments error:", error);
+    return sendError(res, 500, "Failed to fetch dashboard garments summary");
+  }
+};
+
+/**
+ * @swagger
  * /api/reports/revenue:
  *   get:
  *     summary: Ingresos mensuales agregados

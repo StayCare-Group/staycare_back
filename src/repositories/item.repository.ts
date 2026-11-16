@@ -2,11 +2,14 @@ import pool from "../db/pool";
 import type { PoolConnection } from "mysql2/promise";
 import type { RowDataPacket } from "mysql2";
 import { generateEntityId, type EntityId } from "../utils/id";
+import { DEFAULT_ITEM_CATEGORY, type ItemCategory } from "../types/itemCategory";
 
 export interface IItemRow extends RowDataPacket {
   id: EntityId;
   item_code: string;
   name: string;
+  category?: ItemCategory | null;
+  requires_ironing?: boolean;
   base_price: number;
   is_active: boolean;
   created_at: Date;
@@ -16,6 +19,8 @@ export interface IItemRow extends RowDataPacket {
 export interface ItemInsertInput {
   item_code: string;
   name: string;
+  category?: ItemCategory | null;
+  requires_ironing?: boolean;
   base_price: number;
 }
 
@@ -96,9 +101,11 @@ export class ItemRepository {
 
   static async insert(data: ItemInsertInput): Promise<EntityId> {
     const id = generateEntityId();
+    const category = data.category ?? DEFAULT_ITEM_CATEGORY;
+    const requiresIroning = data.requires_ironing ? 1 : 0;
     await pool.execute(
-      "INSERT INTO items (id, item_code, name, base_price) VALUES (?, ?, ?, ?)",
-      [id, data.item_code, data.name, data.base_price]
+      "INSERT INTO items (id, item_code, name, category, requires_ironing, base_price) VALUES (?, ?, ?, ?, ?, ?)",
+      [id, data.item_code, data.name, category, requiresIroning, data.base_price]
     );
     return id;
   }

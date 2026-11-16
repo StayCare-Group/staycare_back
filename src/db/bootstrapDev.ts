@@ -169,6 +169,18 @@ export async function autoInitDbForDevelopment(): Promise<void> {
         // Sync users column
         try { await conn.query(`ALTER TABLE ${db}.\`users\` ADD COLUMN \`parent_client_id\` CHAR(36) NULL DEFAULT NULL`); } catch {}
 
+        // Sync items.category and items.requires_ironing columns
+        try {
+          await conn.query(
+            `ALTER TABLE ${db}.\`items\` ADD COLUMN \`category\` ENUM('sheets', 'covers', 'towels', 'mats_and_cloths', 'others') NOT NULL DEFAULT 'others' AFTER \`name\``
+          );
+        } catch {}
+        try {
+          await conn.query(
+            `ALTER TABLE ${db}.\`items\` ADD COLUMN \`requires_ironing\` TINYINT(1) NOT NULL DEFAULT '0' AFTER \`category\``
+          );
+        } catch {}
+
         // Seed default permissions
         await conn.query(`
           INSERT INTO ${db}.\`permissions\` (\`id\`, \`name\`, \`description\`) VALUES

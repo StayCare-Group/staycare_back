@@ -1,0 +1,16 @@
+export const ITEM_CATEGORIES = [
+  "sheets",
+  "covers",
+  "towels",
+  "mats_and_cloths",
+  "others",
+] as const;
+
+export type ItemCategory = (typeof ITEM_CATEGORIES)[number];
+
+export const DEFAULT_ITEM_CATEGORY: ItemCategory = "others";
+
+export function isItemCategory(value: unknown): value is ItemCategory {
+  return typeof value === "string" && (ITEM_CATEGORIES as readonly string[]).includes(value);
+}
+

@@ -21,6 +21,7 @@ import {
   ORDERS_TO_DELIVER_STATUSES,
   INVOICEABLE_ORDER_STATUSES,
 } from "../types/orderStatus";
+import { ITEM_CATEGORIES, type ItemCategory } from "../types/itemCategory";
 
 export interface DashboardOverviewQuery {
   /** Inclusive business calendar day (YYYY-MM-DD, Malta). */
@@ -105,6 +106,25 @@ export interface DashboardMonthlyComparison {
   rows: DashboardMonthlyComparisonRow[];
 }
 
+export interface DashboardTopGarmentItem {
+  category: ItemCategory;
+  quantity: number;
+  percentage: number;
+}
+
+export interface DashboardGarmentProcessItem {
+  category: ItemCategory;
+  washing: number;
+  drying: number;
+  ironing: number;
+}
+
+export interface DashboardGarmentsSummary {
+  totalItems: number;
+  topGarments: DashboardTopGarmentItem[];
+  processSummary: DashboardGarmentProcessItem[];
+}
+
 export class ReportService {
   static async getDashboardAlerts(
     { clientId }: { clientId?: string | undefined } = {},
@@ -146,15 +166,17 @@ export class ReportService {
 
   static async getDashboardOverview({ from, to, clientId }: DashboardOverviewQuery): Promise<DashboardOverview> {
     const { start, endExclusive } = getBusinessDateRangeUtc(from, to);
-    const {
-      ordersByStatus,
-      itemsByStatus,
-      conditionsByStatus = {},
-    } = await ReportRepository.getDashboardStatusBreakdowns({
-      start,
-      endExclusive,
-      clientId,
-    });
+    const [
+      { ordersByStatus, itemsByStatus, conditionsByStatus = {} },
+      liveProcessRows,
+    ] = await Promise.all([
+      ReportRepository.getDashboardStatusBreakdowns({
+        start,
+        endExclusive,
+        clientId,
+      }),
+      ReportRepository.getLiveProcessBreakdowns([...PROCESSING_ITEM_ORDER_STATUSES], clientId),
+    ]);
 
     let ordersReceived = 0;
     let ordersToPickup = 0;
@@ -191,11 +213,17 @@ export class ReportService {
       }
     }
 
+    // Live snapshot (ignores the date range): what is physically in process right now.
+    const liveItemsByStatus: Partial<Record<OrderStatus, number>> = {};
+    for (const row of liveProcessRows) {
+      liveItemsByStatus[row.status] = (liveItemsByStatus[row.status] ?? 0) + row.itemCount;
+    }
+
     const itemsInProcess: DashboardItemsInProcess = {
-      washing: Number(itemsByStatus[OrderStatus.WASHING]) || 0,
-      drying: Number(itemsByStatus[OrderStatus.DRYING]) || 0,
-      ironing: Number(itemsByStatus[OrderStatus.IRONING]) || 0,
-      qualityCheck: Number(itemsByStatus[OrderStatus.QUALITY_CHECK]) || 0,
+      washing: liveItemsByStatus[OrderStatus.WASHING] ?? 0,
+      drying: liveItemsByStatus[OrderStatus.DRYING] ?? 0,
+      ironing: liveItemsByStatus[OrderStatus.IRONING] ?? 0,
+      qualityCheck: liveItemsByStatus[OrderStatus.QUALITY_CHECK] ?? 0,
     };
 
     let good = 0;
@@ -368,6 +396,82 @@ export class ReportService {
         buildRow("totalIroned", metricsA.totalIroned, metricsB.totalIroned),
         buildRow("totalInvoiced", metricsA.totalInvoiced, metricsB.totalInvoiced, true),
       ],
+    };
+  }
+
+  static async getDashboardGarments({
+    from,
+    to,
+    clientId,
+  }: DashboardOverviewQuery): Promise<DashboardGarmentsSummary> {
+    const { start, endExclusive } = getBusinessDateRangeUtc(from, to);
+    const [rows, liveProcessRows] = await Promise.all([
+      ReportRepository.getDashboardGarmentBreakdowns({
+        start,
+        endExclusive,
+        clientId,
+      }),
+      ReportRepository.getLiveProcessBreakdowns(
+        [OrderStatus.WASHING, OrderStatus.DRYING, OrderStatus.IRONING],
+        clientId
+      ),
+    ]);
+
+    const totalsByCat: Record<ItemCategory, number> = {
+      sheets: 0,
+      covers: 0,
+      towels: 0,
+      mats_and_cloths: 0,
+      others: 0,
+    };
+
+    const processByCat: Record<ItemCategory, { washing: number; drying: number; ironing: number }> = {
+      sheets: { washing: 0, drying: 0, ironing: 0 },
+      covers: { washing: 0, drying: 0, ironing: 0 },
+      towels: { washing: 0, drying: 0, ironing: 0 },
+      mats_and_cloths: { washing: 0, drying: 0, ironing: 0 },
+      others: { washing: 0, drying: 0, ironing: 0 },
+    };
+
+    let totalItems = 0;
+
+    // Top garments: volume within the selected date range.
+    for (const row of rows) {
+      const qty = Number(row.itemCount) || 0;
+      totalsByCat[row.category] = (totalsByCat[row.category] ?? 0) + qty;
+      totalItems += qty;
+    }
+
+    // Process summary: live snapshot, independent of the date range.
+    for (const row of liveProcessRows) {
+      const qty = Number(row.itemCount) || 0;
+      if (row.status === OrderStatus.WASHING) {
+        processByCat[row.category].washing += qty;
+      } else if (row.status === OrderStatus.DRYING) {
+        processByCat[row.category].drying += qty;
+      } else if (row.status === OrderStatus.IRONING) {
+        processByCat[row.category].ironing += qty;
+      }
+    }
+
+    const topGarments: DashboardTopGarmentItem[] = ITEM_CATEGORIES.map((category) => {
+      const quantity = totalsByCat[category] ?? 0;
+      const percentage =
+        totalItems > 0 ? Math.round((quantity / totalItems) * 1000) / 10 : 0;
+      return { category, quantity, percentage };
+    }).sort((a, b) => b.quantity - a.quantity);
+
+    const processSummary: DashboardGarmentProcessItem[] = ITEM_CATEGORIES.map((category) => ({
+      category,
+      washing: processByCat[category].washing,
+      drying: processByCat[category].drying,
+      ironing: processByCat[category].ironing,
+    }));
+
+    return {
+      totalItems,
+      topGarments,
+      processSummary,
     };
   }
 

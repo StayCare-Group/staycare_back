@@ -82,10 +82,11 @@ export const getAllItems = async (req: Request, res: Response) => {
     
     const { items, total } = await ItemService.getAllItems(is_active, limit, skip, search);
     
-    // Map items to ensure is_active is boolean
+    // Map items to ensure boolean fields are normalized
     const mappedItems = items.map((item) => ({
       ...item,
       is_active: !!item.is_active,
+      requires_ironing: !!item.requires_ironing,
     }));
 
     return sendSuccess(

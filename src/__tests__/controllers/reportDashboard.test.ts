@@ -7,12 +7,16 @@ const {
   getOverduePickupsRepoMock,
   getStalledOrdersRepoMock,
   getInvoicedTotalRepoMock,
+  getGarmentBreakdownsRepoMock,
+  getLiveProcessBreakdownsRepoMock,
 } = vi.hoisted(() => ({
   getStatusBreakdownsRepoMock: vi.fn(),
   getOrdersByHourRepoMock: vi.fn(),
   getOverduePickupsRepoMock: vi.fn(),
   getStalledOrdersRepoMock: vi.fn(),
   getInvoicedTotalRepoMock: vi.fn(),
+  getGarmentBreakdownsRepoMock: vi.fn(),
+  getLiveProcessBreakdownsRepoMock: vi.fn(),
 }));
 
 vi.mock("../../repositories/report.repository", () => ({
@@ -22,6 +26,8 @@ vi.mock("../../repositories/report.repository", () => ({
     getDashboardOverduePickups: getOverduePickupsRepoMock,
     getDashboardStalledOrders: getStalledOrdersRepoMock,
     getDashboardInvoicedTotal: getInvoicedTotalRepoMock,
+    getDashboardGarmentBreakdowns: getGarmentBreakdownsRepoMock,
+    getLiveProcessBreakdowns: getLiveProcessBreakdownsRepoMock,
   },
 }));
 
@@ -30,6 +36,7 @@ import {
   getDashboardDailyOrders,
   getDashboardAlerts,
   getDashboardComparison,
+  getDashboardGarments,
 } from "../../controllers/report.controller";
 import { OrderStatus } from "../../types/orderStatus";
 
@@ -47,6 +54,8 @@ describe("getDashboardOverview controller & service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getStatusBreakdownsRepoMock.mockReset();
+    getLiveProcessBreakdownsRepoMock.mockReset();
+    getLiveProcessBreakdownsRepoMock.mockResolvedValue([]);
   });
 
   it("returns 400 when the filters are invalid and does not hit the repository", async () => {
@@ -87,6 +96,13 @@ describe("getDashboardOverview controller & service", () => {
         [OrderStatus.DELIVERED]: { good: 60, bad: 2, stained: 3 },
       },
     });
+    // Live snapshot includes an order created outside the range (washing 5 extra).
+    getLiveProcessBreakdownsRepoMock.mockResolvedValue([
+      { category: "sheets", status: OrderStatus.WASHING, itemCount: 30 },
+      { category: "towels", status: OrderStatus.WASHING, itemCount: 20 },
+      { category: "others", status: OrderStatus.IRONING, itemCount: 15 },
+      { category: "covers", status: OrderStatus.QUALITY_CHECK, itemCount: 4 },
+    ]);
     const req = { query: { from: "2026-11-01", to: "2026-11-07" } } as unknown as Request;
     const res = mockResponse();
 
@@ -104,10 +120,10 @@ describe("getDashboardOverview controller & service", () => {
         ordersToPickup: 2,
         ordersToDeliver: 2,
         itemsInProcess: {
-          washing: 45,
+          washing: 50,
           drying: 0,
           ironing: 15,
-          qualityCheck: 0,
+          qualityCheck: 4,
         },
         itemConditions: {
           good: 156,
@@ -122,6 +138,15 @@ describe("getDashboardOverview controller & service", () => {
     expect(filters.start.toISOString()).toBe("2026-10-31T23:00:00.000Z");
     expect(filters.endExclusive.toISOString()).toBe("2026-11-07T23:00:00.000Z");
     expect(filters.clientId).toBeUndefined();
+    expect(getLiveProcessBreakdownsRepoMock).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        OrderStatus.WASHING,
+        OrderStatus.DRYING,
+        OrderStatus.IRONING,
+        OrderStatus.QUALITY_CHECK,
+      ]),
+      undefined
+    );
   });
 
   it("forwards clientId to the repository", async () => {
@@ -135,6 +160,7 @@ describe("getDashboardOverview controller & service", () => {
     await getDashboardOverview(req, mockResponse());
 
     expect(getStatusBreakdownsRepoMock.mock.calls[0]![0].clientId).toBe(clientId);
+    expect(getLiveProcessBreakdownsRepoMock.mock.calls[0]![1]).toBe(clientId);
   });
 
   it("returns 500 when the repository fails", async () => {
@@ -478,6 +504,52 @@ describe("getDashboardComparison controller & service", () => {
       expect.any(String),
       clientId
     );
+  });
+});
+
+describe("getDashboardGarments controller & service", () => {
+  beforeEach(() => {
+    getGarmentBreakdownsRepoMock.mockReset();
+    getLiveProcessBreakdownsRepoMock.mockReset();
+  });
+
+  it("aggregates topGarments from the date range and processSummary from the live snapshot", async () => {
+    getGarmentBreakdownsRepoMock.mockResolvedValueOnce([
+      { category: "sheets", status: OrderStatus.PENDING, itemCount: 20 },
+      { category: "sheets", status: OrderStatus.WASHING, itemCount: 30 },
+      { category: "sheets", status: OrderStatus.DRYING, itemCount: 50 },
+      { category: "sheets", status: OrderStatus.DELIVERED, itemCount: 100 },
+      { category: "towels", status: OrderStatus.IRONING, itemCount: 150 },
+      { category: "covers", status: OrderStatus.COMPLETED, itemCount: 50 },
+    ]);
+    // Live snapshot is independent of the range (e.g. includes orders from previous months).
+    getLiveProcessBreakdownsRepoMock.mockResolvedValueOnce([
+      { category: "sheets", status: OrderStatus.WASHING, itemCount: 35 },
+      { category: "sheets", status: OrderStatus.DRYING, itemCount: 50 },
+      { category: "towels", status: OrderStatus.IRONING, itemCount: 150 },
+    ]);
+
+    const req = { query: { from: "2026-11-01", to: "2026-11-30" } } as unknown as Request;
+    const res = mockResponse();
+
+    await getDashboardGarments(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.body.data.totalItems).toBe(400);
+    expect(res.body.data.topGarments).toEqual([
+      { category: "sheets", quantity: 200, percentage: 50 },
+      { category: "towels", quantity: 150, percentage: 37.5 },
+      { category: "covers", quantity: 50, percentage: 12.5 },
+      { category: "mats_and_cloths", quantity: 0, percentage: 0 },
+      { category: "others", quantity: 0, percentage: 0 },
+    ]);
+    expect(res.body.data.processSummary).toEqual([
+      { category: "sheets", washing: 35, drying: 50, ironing: 0 },
+      { category: "covers", washing: 0, drying: 0, ironing: 0 },
+      { category: "towels", washing: 0, drying: 0, ironing: 150 },
+      { category: "mats_and_cloths", washing: 0, drying: 0, ironing: 0 },
+      { category: "others", washing: 0, drying: 0, ironing: 0 },
+    ]);
   });
 });
 

@@ -2,6 +2,11 @@ import pool from "../db/pool";
 import type { RowDataPacket } from "mysql2";
 import { toDbOrderStatus, fromDbOrderStatus } from "./order.repository";
 import { OrderStatus, REPORT_EXCLUDED_ORDER_STATUSES } from "../types/orderStatus";
+import {
+  DEFAULT_ITEM_CATEGORY,
+  isItemCategory,
+  type ItemCategory,
+} from "../types/itemCategory";
 
 export interface DashboardStats {
   totalOrders: number;
@@ -67,22 +72,16 @@ export interface DashboardStatusBreakdowns {
   ironedItemsByStatus?: Partial<Record<OrderStatus, number>>;
 }
 
-const IRONED_ITEM_CONDITION_SQL = `(
-  LOWER(oi.name_snapshot) LIKE '%sheet%'
-  OR LOWER(oi.name_snapshot) LIKE '%sábana%'
-  OR LOWER(oi.name_snapshot) LIKE '%sabana%'
-  OR LOWER(oi.name_snapshot) LIKE '%pillow case%'
-  OR LOWER(oi.name_snapshot) LIKE '%pillowcase%'
-  OR LOWER(oi.name_snapshot) LIKE '%funda%'
-  OR LOWER(oi.name_snapshot) LIKE '%cover%'
-  OR LOWER(oi.name_snapshot) LIKE '%napkin%'
-  OR LOWER(oi.name_snapshot) LIKE '%servilleta%'
-)`;
-
 export interface DashboardHourlyOrderCount {
   /** UTC hour bucket formatted as `YYYY-MM-DD HH:00:00`. */
   hourUtc: string;
   orderCount: number;
+}
+
+export interface DashboardGarmentBreakdownRow {
+  category: ItemCategory;
+  status: OrderStatus;
+  itemCount: number;
 }
 
 function buildDashboardOrdersFilter(filters: DashboardOverviewFilters): {
@@ -130,9 +129,10 @@ export class ReportRepository {
                 COALESCE(SUM(oi.qty_good), 0) AS qtyGood,
                 COALESCE(SUM(oi.qty_bad), 0) AS qtyBad,
                 COALESCE(SUM(oi.qty_stained), 0) AS qtyStained,
-                COALESCE(SUM(CASE WHEN ${IRONED_ITEM_CONDITION_SQL} THEN oi.quantity ELSE 0 END), 0) AS ironedItemCount
+                COALESCE(SUM(CASE WHEN COALESCE(i.requires_ironing, 0) = 1 THEN oi.quantity ELSE 0 END), 0) AS ironedItemCount
          FROM orders o
          INNER JOIN order_items oi ON oi.order_id = o.id
+         LEFT JOIN items i ON i.id = oi.item_id
          WHERE ${where}
          GROUP BY o.status`,
         params
@@ -403,5 +403,80 @@ export class ReportRepository {
 
     const [rows] = await pool.query<RowDataPacket[]>(query, params);
     return Number(rows[0]?.totalInvoiced) || 0;
+  }
+
+  /**
+   * Aggregates order item quantities by garment category (`items.category`, defaulting
+   * to 'others' when unassigned or null) and order status within `[start, endExclusive)`.
+   */
+  static async getDashboardGarmentBreakdowns(
+    filters: DashboardOverviewFilters
+  ): Promise<DashboardGarmentBreakdownRow[]> {
+    const { where, params } = buildDashboardOrdersFilter(filters);
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT COALESCE(i.category, 'others') AS garmentCategory,
+              o.status AS status,
+              COALESCE(SUM(oi.quantity), 0) AS itemCount
+       FROM orders o
+       INNER JOIN order_items oi ON oi.order_id = o.id
+       LEFT JOIN items i ON i.id = oi.item_id
+       WHERE ${where}
+       GROUP BY garmentCategory, o.status`,
+      params
+    );
+
+    return rows.map((r) => ({
+      category: isItemCategory(r.garmentCategory) ? r.garmentCategory : DEFAULT_ITEM_CATEGORY,
+      status: fromDbOrderStatus(String(r.status)) as OrderStatus,
+      itemCount: Number(r.itemCount) || 0,
+    }));
+  }
+
+  /**
+   * Live snapshot of items currently inside the plant process, grouped by garment
+   * category and order status. Ignores the dashboard date range on purpose: it reflects
+   * what is physically in process right now, so values drop to zero as orders move on.
+   */
+  static async getLiveProcessBreakdowns(
+    statuses: readonly OrderStatus[],
+    clientId?: string
+  ): Promise<DashboardGarmentBreakdownRow[]> {
+    if (statuses.length === 0) return [];
+
+    const dbStatuses = statuses.map(toDbOrderStatus);
+    const params: unknown[] = [...dbStatuses];
+    let where = `o.status IN (${dbStatuses.map(() => "?").join(", ")})`;
+
+    if (clientId) {
+      where += " AND o.client_id = ?";
+      params.push(clientId);
+    }
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT COALESCE(i.category, 'others') AS garmentCategory,
+              o.status AS status,
+              COALESCE(
+                SUM(
+                  CASE
+                    WHEN o.status = 'Ironing' AND COALESCE(i.requires_ironing, 0) = 0 THEN 0
+                    ELSE oi.quantity
+                  END
+                ),
+                0
+              ) AS itemCount
+       FROM orders o
+       INNER JOIN order_items oi ON oi.order_id = o.id
+       LEFT JOIN items i ON i.id = oi.item_id
+       WHERE ${where}
+       GROUP BY garmentCategory, o.status`,
+      params
+    );
+
+    return rows.map((r) => ({
+      category: isItemCategory(r.garmentCategory) ? r.garmentCategory : DEFAULT_ITEM_CATEGORY,
+      status: fromDbOrderStatus(String(r.status)) as OrderStatus,
+      itemCount: Number(r.itemCount) || 0,
+    }));
   }
 }
