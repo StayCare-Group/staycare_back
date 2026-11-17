@@ -172,17 +172,17 @@ export async function autoInitDbForDevelopment(): Promise<void> {
         // Sync items.category and items.requires_ironing columns
         try {
           await conn.query(
-            `ALTER TABLE ${db}.\`items\` ADD COLUMN \`category\` ENUM('sheets', 'covers', 'towels', 'pillows', 'others') NOT NULL DEFAULT 'others' AFTER \`name\``
+            `ALTER TABLE ${db}.\`items\` ADD COLUMN \`category\` ENUM('sheets', 'covers', 'towels', 'pillow_cases', 'others') NOT NULL DEFAULT 'others' AFTER \`name\``
           );
         } catch {}
         try {
           await conn.query(
-            `UPDATE ${db}.\`items\` SET \`category\` = 'others' WHERE \`category\` = 'mats_and_cloths'`
+            `UPDATE ${db}.\`items\` SET \`category\` = 'others' WHERE \`category\` IN ('mats_and_cloths', 'pillows')`
           );
         } catch {}
         try {
           await conn.query(
-            `ALTER TABLE ${db}.\`items\` MODIFY COLUMN \`category\` ENUM('sheets', 'covers', 'towels', 'pillows', 'others') NOT NULL DEFAULT 'others'`
+            `ALTER TABLE ${db}.\`items\` MODIFY COLUMN \`category\` ENUM('sheets', 'covers', 'towels', 'pillow_cases', 'others') NOT NULL DEFAULT 'others'`
           );
         } catch {}
         try {

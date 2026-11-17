@@ -540,14 +540,14 @@ describe("getDashboardGarments controller & service", () => {
       { category: "sheets", quantity: 200, percentage: 50 },
       { category: "towels", quantity: 150, percentage: 37.5 },
       { category: "covers", quantity: 50, percentage: 12.5 },
-      { category: "pillows", quantity: 0, percentage: 0 },
+      { category: "pillow_cases", quantity: 0, percentage: 0 },
       { category: "others", quantity: 0, percentage: 0 },
     ]);
     expect(res.body.data.processSummary).toEqual([
       { category: "sheets", washing: 35, drying: 50, ironing: 0 },
       { category: "covers", washing: 0, drying: 0, ironing: 0 },
       { category: "towels", washing: 0, drying: 0, ironing: 150 },
-      { category: "pillows", washing: 0, drying: 0, ironing: 0 },
+      { category: "pillow_cases", washing: 0, drying: 0, ironing: 0 },
       { category: "others", washing: 0, drying: 0, ironing: 0 },
     ]);
   });

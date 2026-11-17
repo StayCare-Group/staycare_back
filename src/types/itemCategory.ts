@@ -2,7 +2,7 @@ export const ITEM_CATEGORIES = [
   "sheets",
   "covers",
   "towels",
-  "pillows",
+  "pillow_cases",
   "others",
 ] as const;
 

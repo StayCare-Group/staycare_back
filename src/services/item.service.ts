@@ -55,9 +55,9 @@ export class ItemService {
       { item_code: "BT", name: "Bath Towel", category: "towels", base_price: 0 },
       { item_code: "HT", name: "Hand Towel", category: "towels", base_price: 0 },
       { item_code: "FC", name: "Face Cloth", category: "others", base_price: 0 },
-      { item_code: "PC", name: "Pillow Case", category: "pillows", base_price: 0 },
+      { item_code: "PC", name: "Pillow Case", category: "pillow_cases", base_price: 0 },
       { item_code: "BM", name: "Bath Mat", category: "others", base_price: 0 },
-      { item_code: "P", name: "Pillow", category: "pillows", base_price: 0 },
+      { item_code: "P", name: "Pillow", category: "others", base_price: 0 },
       { item_code: "D", name: "Duvet", category: "others", base_price: 0 },
     ];
 

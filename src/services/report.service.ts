@@ -421,7 +421,7 @@ export class ReportService {
       sheets: 0,
       covers: 0,
       towels: 0,
-      pillows: 0,
+      pillow_cases: 0,
       others: 0,
     };
 
@@ -429,7 +429,7 @@ export class ReportService {
       sheets: { washing: 0, drying: 0, ironing: 0 },
       covers: { washing: 0, drying: 0, ironing: 0 },
       towels: { washing: 0, drying: 0, ironing: 0 },
-      pillows: { washing: 0, drying: 0, ironing: 0 },
+      pillow_cases: { washing: 0, drying: 0, ironing: 0 },
       others: { washing: 0, drying: 0, ironing: 0 },
     };
 
